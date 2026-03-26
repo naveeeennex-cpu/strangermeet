@@ -1,0 +1,97 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'storage_service.dart';
+import '../config/constants.dart';
+
+class WebSocketService {
+  static final WebSocketService _instance = WebSocketService._();
+  factory WebSocketService() => _instance;
+  WebSocketService._();
+
+  WebSocketChannel? _channel;
+  bool _isConnected = false;
+  Timer? _reconnectTimer;
+
+  final _messageController = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get messageStream => _messageController.stream;
+
+  bool get isConnected => _isConnected;
+
+  Future<void> connect() async {
+    if (_isConnected) return;
+
+    final token = await StorageService().getToken();
+    if (token == null) return;
+
+    // Convert http://localhost:8000/api to ws://localhost:8000/api/messages/ws/{token}
+    final baseUrl = AppConstants.baseUrl
+        .replaceFirst('http://', 'ws://')
+        .replaceFirst('https://', 'wss://');
+    final wsUrl = '$baseUrl/messages/ws/$token';
+
+    try {
+      _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      _isConnected = true;
+      _reconnectTimer?.cancel();
+
+      _channel!.stream.listen(
+        (data) {
+          try {
+            final json = jsonDecode(data as String) as Map<String, dynamic>;
+            _messageController.add(json);
+          } catch (_) {}
+        },
+        onDone: () {
+          _isConnected = false;
+          _scheduleReconnect();
+        },
+        onError: (_) {
+          _isConnected = false;
+          _scheduleReconnect();
+        },
+      );
+    } catch (_) {
+      _isConnected = false;
+      _scheduleReconnect();
+    }
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 3), connect);
+  }
+
+  void sendMessage(String receiverId, String message, {String imageUrl = '', String messageType = 'text'}) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'message',
+      'receiver_id': receiverId,
+      'message': message,
+      'image_url': imageUrl,
+      'message_type': messageType,
+    }));
+  }
+
+  void markAsRead(String senderId) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'read',
+      'sender_id': senderId,
+    }));
+  }
+
+  void sendTyping(String receiverId) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'typing',
+      'receiver_id': receiverId,
+    }));
+  }
+
+  void disconnect() {
+    _reconnectTimer?.cancel();
+    _channel?.sink.close();
+    _isConnected = false;
+  }
+}

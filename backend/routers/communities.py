@@ -1,0 +1,1506 @@
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from typing import List
+
+from schemas.community import (
+    CommunityCreate, CommunityUpdate, CommunityResponse,
+    CommunityPostCreate, CommunityPostResponse,
+    CommunityPostCommentCreate, CommunityPostCommentResponse,
+    SubGroupCreate, SubGroupResponse,
+    CommunityMessageCreate, CommunityMessageResponse,
+    SubGroupMessageCreate, SubGroupMessageResponse,
+    CommunityEventCreate, CommunityEventResponse,
+    CommunityEventBookingResponse,
+    EventParticipantResponse,
+    CommunityMemberResponse,
+    SubGroupMemberResponse,
+    ItineraryDayCreate, ItineraryDayResponse,
+)
+from services.auth import get_current_user
+
+router = APIRouter(prefix="/api/communities", tags=["communities"])
+
+
+# ── Helper: check membership ────────────────────────────────────────────────
+
+async def _get_membership(pool, community_id: str, user_id: str):
+    try:
+        return await pool.fetchrow(
+            "SELECT * FROM community_members WHERE community_id = $1 AND user_id = $2 AND status = 'active'",
+            community_id, user_id
+        )
+    except Exception:
+        return None
+
+
+async def _require_member(pool, community_id: str, user_id: str):
+    member = await _get_membership(pool, community_id, user_id)
+    if not member:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be a member of this community")
+    return member
+
+
+async def _require_admin(pool, community_id: str, user_id: str):
+    member = await _get_membership(pool, community_id, user_id)
+    if not member or member["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return member
+
+
+# ── CRUD: Communities ────────────────────────────────────────────────────────
+
+@router.post("", response_model=CommunityResponse, status_code=status.HTTP_201_CREATED)
+async def create_community(
+    data: CommunityCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    try:
+        row = await pool.fetchrow(
+            """INSERT INTO communities (name, description, image_url, category, is_private, created_by, members_count)
+               VALUES ($1, $2, $3, $4, $5, $6, 1)
+               RETURNING *""",
+            data.name, data.description, data.image_url, data.category, data.is_private, user_id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create community: {str(e)}")
+
+    community_id = str(row["id"])
+
+    # Add creator as admin member
+    await pool.execute(
+        "INSERT INTO community_members (community_id, user_id, role, status) VALUES ($1, $2, 'admin', 'active')",
+        community_id, user_id
+    )
+
+    return CommunityResponse(
+        id=community_id,
+        name=row["name"],
+        description=row["description"],
+        image_url=row["image_url"],
+        category=row["category"],
+        is_private=row["is_private"],
+        created_by=str(row["created_by"]),
+        creator_name=current_user["name"],
+        members_count=row["members_count"],
+        is_member=True,
+        member_role="admin",
+        created_at=row["created_at"],
+    )
+
+
+@router.get("", response_model=List[CommunityResponse])
+async def list_communities(
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    category: str = Query("", description="Filter by category"),
+    search: str = Query("", description="Search by name"),
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    query = """
+        SELECT c.*, u.name AS creator_name,
+               cm.role AS member_role, cm.status AS member_status
+        FROM communities c
+        JOIN users u ON c.created_by = u.id
+        LEFT JOIN community_members cm ON cm.community_id = c.id AND cm.user_id = $1
+        WHERE 1=1
+    """
+    params = [user_id]
+    idx = 2
+
+    if category:
+        query += f" AND c.category = ${idx}"
+        params.append(category)
+        idx += 1
+
+    if search:
+        query += f" AND c.name ILIKE ${idx}"
+        params.append(f"%{search}%")
+        idx += 1
+
+    query += f" ORDER BY c.created_at DESC OFFSET ${idx} LIMIT ${idx + 1}"
+    params.extend([skip, limit])
+
+    rows = await pool.fetch(query, *params)
+
+    return [
+        CommunityResponse(
+            id=str(row["id"]),
+            name=row["name"],
+            description=row["description"],
+            image_url=row["image_url"],
+            category=row["category"],
+            is_private=row["is_private"],
+            created_by=str(row["created_by"]),
+            creator_name=row["creator_name"],
+            members_count=row["members_count"],
+            is_member=row["member_role"] is not None and row["member_status"] == "active",
+            member_role=row["member_role"] if row["member_status"] == "active" else None,
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+@router.get("/my", response_model=List[CommunityResponse])
+async def my_communities(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    rows = await pool.fetch(
+        """SELECT c.*, u.name AS creator_name,
+                  cm.role AS member_role, cm.status AS member_status
+           FROM communities c
+           JOIN users u ON c.created_by = u.id
+           JOIN community_members cm ON cm.community_id = c.id AND cm.user_id = $1 AND cm.status = 'active'
+           ORDER BY c.created_at DESC""",
+        user_id
+    )
+
+    return [
+        CommunityResponse(
+            id=str(row["id"]),
+            name=row["name"],
+            description=row["description"],
+            image_url=row["image_url"],
+            category=row["category"],
+            is_private=row["is_private"],
+            created_by=str(row["created_by"]),
+            creator_name=row["creator_name"],
+            members_count=row["members_count"],
+            is_member=True,
+            member_role=row["member_role"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+@router.get("/count/{user_id}")
+async def community_count(
+    user_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+
+    try:
+        count = await pool.fetchval(
+            "SELECT COUNT(*) FROM community_members WHERE user_id = $1 AND status = 'active'",
+            user_id
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user ID format")
+
+    return {"count": count or 0}
+
+
+@router.get("/{community_id}", response_model=CommunityResponse)
+async def get_community(
+    community_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    try:
+        row = await pool.fetchrow(
+            """SELECT c.*, u.name AS creator_name, u.phone AS admin_phone,
+                      cm.role AS member_role, cm.status AS member_status
+               FROM communities c
+               JOIN users u ON c.created_by = u.id
+               LEFT JOIN community_members cm ON cm.community_id = c.id AND cm.user_id = $2
+               WHERE c.id = $1""",
+            community_id, user_id
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid community ID format")
+
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+
+    return CommunityResponse(
+        id=str(row["id"]),
+        name=row["name"],
+        description=row["description"],
+        image_url=row["image_url"],
+        category=row["category"],
+        is_private=row["is_private"],
+        created_by=str(row["created_by"]),
+        creator_name=row["creator_name"],
+        admin_phone=row.get("admin_phone") or None,
+        members_count=row["members_count"],
+        is_member=row["member_role"] is not None and row.get("member_status") == "active",
+        member_role=row["member_role"] if row.get("member_status") == "active" else None,
+        created_at=row["created_at"],
+    )
+
+
+@router.put("/{community_id}", response_model=CommunityResponse)
+async def update_community(
+    community_id: str,
+    data: CommunityUpdate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    updates = []
+    params = []
+    idx = 1
+    for field in ["name", "description", "image_url", "category", "is_private"]:
+        value = getattr(data, field)
+        if value is not None:
+            updates.append(f"{field} = ${idx}")
+            params.append(value)
+            idx += 1
+
+    if not updates:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+
+    params.append(community_id)
+    query = f"UPDATE communities SET {', '.join(updates)} WHERE id = ${idx} RETURNING *"
+
+    row = await pool.fetchrow(query, *params)
+
+    creator = await pool.fetchrow("SELECT name FROM users WHERE id = $1", str(row["created_by"]))
+
+    return CommunityResponse(
+        id=str(row["id"]),
+        name=row["name"],
+        description=row["description"],
+        image_url=row["image_url"],
+        category=row["category"],
+        is_private=row["is_private"],
+        created_by=str(row["created_by"]),
+        creator_name=creator["name"] if creator else None,
+        members_count=row["members_count"],
+        is_member=True,
+        member_role="admin",
+        created_at=row["created_at"],
+    )
+
+
+@router.delete("/{community_id}", status_code=status.HTTP_200_OK)
+async def delete_community(
+    community_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    await pool.execute("DELETE FROM communities WHERE id = $1", community_id)
+    return {"detail": "Community deleted successfully"}
+
+
+# ── Join / Leave ─────────────────────────────────────────────────────────────
+
+@router.post("/{community_id}/join", status_code=status.HTTP_200_OK)
+async def join_community(
+    community_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    try:
+        community = await pool.fetchrow("SELECT id, is_private FROM communities WHERE id = $1", community_id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid community ID format")
+
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+
+    existing = await _get_membership(pool, community_id, user_id)
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already a member")
+
+    # Check if there's a pending membership
+    pending = await pool.fetchrow(
+        "SELECT id FROM community_members WHERE community_id = $1 AND user_id = $2 AND status = 'pending'",
+        community_id, user_id
+    )
+    if pending:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Membership request already pending")
+
+    member_status = "pending" if community["is_private"] else "active"
+
+    await pool.execute(
+        "INSERT INTO community_members (community_id, user_id, role, status) VALUES ($1, $2, 'member', $3) ON CONFLICT DO NOTHING",
+        community_id, user_id, member_status
+    )
+
+    if member_status == "active":
+        await pool.execute(
+            "UPDATE communities SET members_count = members_count + 1 WHERE id = $1",
+            community_id
+        )
+
+    return {"detail": "Joined community" if member_status == "active" else "Membership request sent"}
+
+
+@router.post("/{community_id}/leave", status_code=status.HTTP_200_OK)
+async def leave_community(
+    community_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    member = await _get_membership(pool, community_id, user_id)
+    if not member:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not a member")
+
+    if member["role"] == "admin":
+        # Check if there are other admins
+        admin_count = await pool.fetchval(
+            "SELECT COUNT(*) FROM community_members WHERE community_id = $1 AND role = 'admin' AND status = 'active'",
+            community_id
+        )
+        if admin_count <= 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot leave as the only admin. Delete the community or assign another admin.")
+
+    await pool.execute(
+        "DELETE FROM community_members WHERE community_id = $1 AND user_id = $2",
+        community_id, user_id
+    )
+
+    await pool.execute(
+        "UPDATE communities SET members_count = GREATEST(members_count - 1, 0) WHERE id = $1",
+        community_id
+    )
+
+    return {"detail": "Left community"}
+
+
+# ── Members ──────────────────────────────────────────────────────────────────
+
+@router.get("/{community_id}/members", response_model=List[CommunityMemberResponse])
+async def list_members(
+    community_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+
+    rows = await pool.fetch(
+        """SELECT cm.*, u.name AS user_name, u.email AS user_email, u.profile_image_url AS user_profile_image
+           FROM community_members cm
+           JOIN users u ON cm.user_id = u.id
+           WHERE cm.community_id = $1 AND cm.status = 'active'
+           ORDER BY cm.joined_at ASC""",
+        community_id
+    )
+
+    return [
+        CommunityMemberResponse(
+            id=str(row["id"]),
+            user_id=str(row["user_id"]),
+            user_name=row["user_name"],
+            user_email=row["user_email"],
+            user_profile_image=row.get("user_profile_image"),
+            role=row["role"],
+            status=row["status"],
+            joined_at=row["joined_at"],
+        )
+        for row in rows
+    ]
+
+
+# ── Community Posts ──────────────────────────────────────────────────────────
+
+@router.post("/{community_id}/posts", response_model=CommunityPostResponse, status_code=status.HTTP_201_CREATED)
+async def create_community_post(
+    community_id: str,
+    data: CommunityPostCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_member(pool, community_id, user_id)
+
+    try:
+        row = await pool.fetchrow(
+            """INSERT INTO community_posts (community_id, user_id, image_url, caption)
+               VALUES ($1, $2, $3, $4) RETURNING *""",
+            community_id, user_id, data.image_url, data.caption
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create post: {str(e)}")
+
+    return CommunityPostResponse(
+        id=str(row["id"]),
+        community_id=str(row["community_id"]),
+        user_id=str(row["user_id"]),
+        user_name=current_user["name"],
+        user_profile_image=current_user.get("profile_image_url"),
+        image_url=row["image_url"],
+        caption=row["caption"],
+        likes_count=0,
+        is_liked=False,
+        comments_count=0,
+        created_at=row["created_at"],
+    )
+
+
+@router.get("/{community_id}/posts", response_model=List[CommunityPostResponse])
+async def list_community_posts(
+    community_id: str,
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    rows = await pool.fetch(
+        """SELECT cp.*, u.name AS user_name, u.profile_image_url AS user_profile_image,
+                  (SELECT COUNT(*) FROM community_post_comments WHERE post_id = cp.id) AS comments_count
+           FROM community_posts cp
+           JOIN users u ON cp.user_id = u.id
+           WHERE cp.community_id = $1
+           ORDER BY cp.created_at DESC
+           OFFSET $2 LIMIT $3""",
+        community_id, skip, limit
+    )
+
+    if rows:
+        post_ids = [row["id"] for row in rows]
+        liked_rows = await pool.fetch(
+            "SELECT post_id FROM community_post_likes WHERE user_id = $1 AND post_id = ANY($2)",
+            user_id, post_ids
+        )
+        liked_ids = {str(r["post_id"]) for r in liked_rows}
+    else:
+        liked_ids = set()
+
+    return [
+        CommunityPostResponse(
+            id=str(row["id"]),
+            community_id=str(row["community_id"]),
+            user_id=str(row["user_id"]),
+            user_name=row["user_name"],
+            user_profile_image=row.get("user_profile_image"),
+            image_url=row["image_url"],
+            caption=row["caption"],
+            likes_count=row["likes_count"],
+            is_liked=str(row["id"]) in liked_ids,
+            comments_count=row.get("comments_count", 0),
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+@router.post("/{community_id}/posts/{post_id}/like", response_model=CommunityPostResponse)
+async def toggle_community_post_like(
+    community_id: str,
+    post_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_member(pool, community_id, user_id)
+
+    try:
+        post = await pool.fetchrow("SELECT id FROM community_posts WHERE id = $1 AND community_id = $2", post_id, community_id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid post ID format")
+
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    existing_like = await pool.fetchrow(
+        "SELECT id FROM community_post_likes WHERE post_id = $1 AND user_id = $2",
+        post_id, user_id
+    )
+
+    if existing_like:
+        await pool.execute("DELETE FROM community_post_likes WHERE post_id = $1 AND user_id = $2", post_id, user_id)
+        await pool.execute("UPDATE community_posts SET likes_count = GREATEST(likes_count - 1, 0) WHERE id = $1", post_id)
+    else:
+        await pool.execute("INSERT INTO community_post_likes (post_id, user_id) VALUES ($1, $2)", post_id, user_id)
+        await pool.execute("UPDATE community_posts SET likes_count = likes_count + 1 WHERE id = $1", post_id)
+
+    row = await pool.fetchrow(
+        """SELECT cp.*, u.name AS user_name, u.profile_image_url AS user_profile_image,
+                  (SELECT COUNT(*) FROM community_post_comments WHERE post_id = cp.id) AS comments_count
+           FROM community_posts cp
+           JOIN users u ON cp.user_id = u.id
+           WHERE cp.id = $1""",
+        post_id
+    )
+
+    return CommunityPostResponse(
+        id=str(row["id"]),
+        community_id=str(row["community_id"]),
+        user_id=str(row["user_id"]),
+        user_name=row["user_name"],
+        user_profile_image=row.get("user_profile_image"),
+        image_url=row["image_url"],
+        caption=row["caption"],
+        likes_count=row["likes_count"],
+        is_liked=existing_like is None,
+        comments_count=row.get("comments_count", 0),
+        created_at=row["created_at"],
+    )
+
+
+@router.post("/{community_id}/posts/{post_id}/comment", response_model=CommunityPostCommentResponse, status_code=status.HTTP_201_CREATED)
+async def add_community_post_comment(
+    community_id: str,
+    post_id: str,
+    data: CommunityPostCommentCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_member(pool, community_id, user_id)
+
+    try:
+        post = await pool.fetchrow("SELECT id FROM community_posts WHERE id = $1 AND community_id = $2", post_id, community_id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid post ID format")
+
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    row = await pool.fetchrow(
+        "INSERT INTO community_post_comments (post_id, user_id, text) VALUES ($1, $2, $3) RETURNING *",
+        post_id, user_id, data.text
+    )
+
+    return CommunityPostCommentResponse(
+        id=str(row["id"]),
+        post_id=str(row["post_id"]),
+        user_id=str(row["user_id"]),
+        user_name=current_user["name"],
+        text=row["text"],
+        created_at=row["created_at"],
+    )
+
+
+@router.get("/{community_id}/posts/{post_id}/comments", response_model=List[CommunityPostCommentResponse])
+async def get_community_post_comments(
+    community_id: str,
+    post_id: str,
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+
+    rows = await pool.fetch(
+        """SELECT cpc.*, u.name AS user_name
+           FROM community_post_comments cpc
+           JOIN users u ON cpc.user_id = u.id
+           WHERE cpc.post_id = $1
+           ORDER BY cpc.created_at DESC
+           OFFSET $2 LIMIT $3""",
+        post_id, skip, limit
+    )
+
+    return [
+        CommunityPostCommentResponse(
+            id=str(row["id"]),
+            post_id=str(row["post_id"]),
+            user_id=str(row["user_id"]),
+            user_name=row["user_name"],
+            text=row["text"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+# ── Community Group Chat ─────────────────────────────────────────────────────
+
+@router.post("/{community_id}/messages", response_model=CommunityMessageResponse, status_code=status.HTTP_201_CREATED)
+async def send_community_message(
+    community_id: str,
+    data: CommunityMessageCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_member(pool, community_id, user_id)
+
+    row = await pool.fetchrow(
+        "INSERT INTO community_messages (community_id, user_id, message, image_url, message_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        community_id, user_id, data.message, data.image_url, data.message_type
+    )
+
+    return CommunityMessageResponse(
+        id=str(row["id"]),
+        community_id=str(row["community_id"]),
+        user_id=str(row["user_id"]),
+        user_name=current_user["name"],
+        user_profile_image=current_user.get("profile_image_url"),
+        message=row["message"],
+        timestamp=row["timestamp"],
+        image_url=row.get("image_url") or "",
+        message_type=row.get("message_type") or "text",
+    )
+
+
+@router.get("/{community_id}/messages", response_model=List[CommunityMessageResponse])
+async def get_community_messages(
+    community_id: str,
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+
+    rows = await pool.fetch(
+        """SELECT cm.*, u.name AS user_name, u.profile_image_url AS user_profile_image
+           FROM community_messages cm
+           JOIN users u ON cm.user_id = u.id
+           WHERE cm.community_id = $1
+           ORDER BY cm.timestamp ASC
+           OFFSET $2 LIMIT $3""",
+        community_id, skip, limit
+    )
+
+    return [
+        CommunityMessageResponse(
+            id=str(row["id"]),
+            community_id=str(row["community_id"]),
+            user_id=str(row["user_id"]),
+            user_name=row["user_name"],
+            user_profile_image=row.get("user_profile_image"),
+            message=row["message"],
+            timestamp=row["timestamp"],
+            image_url=row.get("image_url") or "",
+            message_type=row.get("message_type") or "text",
+        )
+        for row in rows
+    ]
+
+
+# ── Sub-groups ───────────────────────────────────────────────────────────────
+
+@router.post("/{community_id}/groups", response_model=SubGroupResponse, status_code=status.HTTP_201_CREATED)
+async def create_sub_group(
+    community_id: str,
+    data: SubGroupCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    row = await pool.fetchrow(
+        """INSERT INTO sub_groups (community_id, name, description, type, created_by)
+           VALUES ($1, $2, $3, $4, $5) RETURNING *""",
+        community_id, data.name, data.description, data.type, user_id
+    )
+
+    group_id = str(row["id"])
+
+    # Add creator as member
+    await pool.execute(
+        "INSERT INTO sub_group_members (sub_group_id, user_id) VALUES ($1, $2)",
+        group_id, user_id
+    )
+
+    return SubGroupResponse(
+        id=group_id,
+        community_id=str(row["community_id"]),
+        name=row["name"],
+        description=row["description"],
+        type=row["type"],
+        created_by=str(row["created_by"]),
+        creator_name=current_user["name"],
+        members_count=1,
+        is_member=True,
+        created_at=row["created_at"],
+    )
+
+
+@router.get("/{community_id}/groups", response_model=List[SubGroupResponse])
+async def list_sub_groups(
+    community_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    rows = await pool.fetch(
+        """SELECT sg.*, u.name AS creator_name,
+                  (SELECT COUNT(*) FROM sub_group_members WHERE sub_group_id = sg.id) AS members_count,
+                  EXISTS(SELECT 1 FROM sub_group_members WHERE sub_group_id = sg.id AND user_id = $2) AS is_member
+           FROM sub_groups sg
+           JOIN users u ON sg.created_by = u.id
+           WHERE sg.community_id = $1
+           ORDER BY sg.created_at ASC""",
+        community_id, user_id
+    )
+
+    return [
+        SubGroupResponse(
+            id=str(row["id"]),
+            community_id=str(row["community_id"]),
+            name=row["name"],
+            description=row["description"],
+            type=row["type"],
+            created_by=str(row["created_by"]),
+            creator_name=row["creator_name"],
+            members_count=row["members_count"],
+            is_member=row["is_member"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+@router.put("/{community_id}/groups/{group_id}", response_model=SubGroupResponse)
+async def update_sub_group(
+    community_id: str,
+    group_id: str,
+    data: SubGroupCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    row = await pool.fetchrow(
+        """UPDATE sub_groups SET name = $1, description = $2, type = $3
+           WHERE id = $4 AND community_id = $5 RETURNING *""",
+        data.name, data.description, data.type, group_id, community_id
+    )
+
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sub-group not found")
+
+    members_count = await pool.fetchval(
+        "SELECT COUNT(*) FROM sub_group_members WHERE sub_group_id = $1", group_id
+    )
+
+    creator = await pool.fetchrow("SELECT name FROM users WHERE id = $1", str(row["created_by"]))
+
+    return SubGroupResponse(
+        id=str(row["id"]),
+        community_id=str(row["community_id"]),
+        name=row["name"],
+        description=row["description"],
+        type=row["type"],
+        created_by=str(row["created_by"]),
+        creator_name=creator["name"] if creator else None,
+        members_count=members_count or 0,
+        is_member=True,
+        created_at=row["created_at"],
+    )
+
+
+@router.delete("/{community_id}/groups/{group_id}", status_code=status.HTTP_200_OK)
+async def delete_sub_group(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    result = await pool.execute(
+        "DELETE FROM sub_groups WHERE id = $1 AND community_id = $2",
+        group_id, community_id
+    )
+
+    if result == "DELETE 0":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sub-group not found")
+
+    return {"detail": "Sub-group deleted successfully"}
+
+
+@router.post("/{community_id}/groups/{group_id}/join", status_code=status.HTTP_200_OK)
+async def join_sub_group(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_member(pool, community_id, user_id)
+
+    try:
+        group = await pool.fetchrow(
+            "SELECT id FROM sub_groups WHERE id = $1 AND community_id = $2",
+            group_id, community_id
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid group ID format")
+
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sub-group not found")
+
+    await pool.execute(
+        "INSERT INTO sub_group_members (sub_group_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        group_id, user_id
+    )
+
+    return {"detail": "Joined sub-group"}
+
+
+@router.post("/{community_id}/groups/{group_id}/leave", status_code=status.HTTP_200_OK)
+async def leave_sub_group(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await pool.execute(
+        "DELETE FROM sub_group_members WHERE sub_group_id = $1 AND user_id = $2",
+        group_id, user_id
+    )
+
+    return {"detail": "Left sub-group"}
+
+
+# ── Sub-group Members ───────────────────────────────────────────────────────
+
+@router.get("/{community_id}/groups/{group_id}/members", response_model=List[SubGroupMemberResponse])
+async def list_sub_group_members(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+
+    # Verify the sub-group belongs to the community
+    try:
+        group = await pool.fetchrow(
+            "SELECT id FROM sub_groups WHERE id = $1 AND community_id = $2",
+            group_id, community_id
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID format")
+
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sub-group not found")
+
+    rows = await pool.fetch(
+        """SELECT sgm.id, sgm.user_id, sgm.joined_at,
+                  u.name AS user_name, u.profile_image_url AS user_profile_image
+           FROM sub_group_members sgm
+           JOIN users u ON sgm.user_id = u.id
+           WHERE sgm.sub_group_id = $1
+           ORDER BY sgm.joined_at ASC""",
+        group_id
+    )
+
+    return [
+        SubGroupMemberResponse(
+            id=str(row["id"]),
+            user_id=str(row["user_id"]),
+            user_name=row["user_name"],
+            user_profile_image=row.get("user_profile_image"),
+            joined_at=row["joined_at"],
+        )
+        for row in rows
+    ]
+
+
+# ── Sub-group Messages ──────────────────────────────────────────────────────
+
+@router.post("/{community_id}/groups/{group_id}/messages", response_model=SubGroupMessageResponse, status_code=status.HTTP_201_CREATED)
+async def send_sub_group_message(
+    community_id: str,
+    group_id: str,
+    data: SubGroupMessageCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    # Auto-join sub-group if not a member
+    member = await pool.fetchrow(
+        "SELECT id FROM sub_group_members WHERE sub_group_id = $1 AND user_id = $2",
+        group_id, user_id
+    )
+    if not member:
+        # Also auto-join community if needed
+        community_member = await _get_membership(pool, community_id, user_id)
+        if not community_member:
+            try:
+                await pool.execute(
+                    "INSERT INTO community_members (community_id, user_id, role, status) VALUES ($1, $2, 'member', 'active')",
+                    community_id, user_id
+                )
+            except Exception:
+                pass
+        try:
+            await pool.execute(
+                "INSERT INTO sub_group_members (sub_group_id, user_id) VALUES ($1, $2)",
+                group_id, user_id
+            )
+        except Exception:
+            pass
+
+    row = await pool.fetchrow(
+        "INSERT INTO sub_group_messages (sub_group_id, user_id, message, image_url, message_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        group_id, user_id, data.message, data.image_url, data.message_type
+    )
+
+    return SubGroupMessageResponse(
+        id=str(row["id"]),
+        sub_group_id=str(row["sub_group_id"]),
+        user_id=str(row["user_id"]),
+        user_name=current_user["name"],
+        user_profile_image=current_user.get("profile_image_url"),
+        message=row["message"],
+        timestamp=row["timestamp"],
+        image_url=row.get("image_url") or "",
+        message_type=row.get("message_type") or "text",
+    )
+
+
+@router.get("/{community_id}/groups/{group_id}/messages", response_model=List[SubGroupMessageResponse])
+async def get_sub_group_messages(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+
+    rows = await pool.fetch(
+        """SELECT sgm.*, u.name AS user_name, u.profile_image_url AS user_profile_image
+           FROM sub_group_messages sgm
+           JOIN users u ON sgm.user_id = u.id
+           WHERE sgm.sub_group_id = $1
+           ORDER BY sgm.timestamp ASC
+           OFFSET $2 LIMIT $3""",
+        group_id, skip, limit
+    )
+
+    return [
+        SubGroupMessageResponse(
+            id=str(row["id"]),
+            sub_group_id=str(row["sub_group_id"]),
+            user_id=str(row["user_id"]),
+            user_name=row["user_name"],
+            user_profile_image=row.get("user_profile_image"),
+            message=row["message"],
+            timestamp=row["timestamp"],
+            image_url=row.get("image_url") or "",
+            message_type=row.get("message_type") or "text",
+        )
+        for row in rows
+    ]
+
+
+# ── Helper: build event response with trip fields ────────────────────────────
+
+def _event_row_to_response(row, creator_name=None, is_booked=False, participants_count=0):
+    return CommunityEventResponse(
+        id=str(row["id"]),
+        community_id=str(row["community_id"]),
+        title=row["title"],
+        description=row["description"],
+        location=row["location"],
+        date=row["date"],
+        price=row["price"],
+        slots=row["slots"],
+        image_url=row["image_url"],
+        created_by=str(row["created_by"]),
+        creator_name=creator_name,
+        is_booked=is_booked,
+        is_joined=is_booked,
+        participants_count=participants_count,
+        event_type=row.get("event_type", "event") or "event",
+        duration_days=row.get("duration_days", 1) or 1,
+        difficulty=row.get("difficulty", "easy") or "easy",
+        includes=list(row.get("includes") or []),
+        excludes=list(row.get("excludes") or []),
+        meeting_point=row.get("meeting_point", "") or "",
+        end_date=row.get("end_date"),
+        max_altitude_m=row.get("max_altitude_m", 0) or 0,
+        total_distance_km=row.get("total_distance_km", 0) or 0,
+        community_name=row.get("community_name"),
+        community_image=row.get("community_image"),
+        created_at=row["created_at"],
+    )
+
+
+# ── Global Explore: All trips & events ────────────────────────────────────────
+
+@router.get("/explore/all-events", response_model=List[CommunityEventResponse])
+async def explore_all_events(
+    request: Request,
+    event_type: str = Query("all"),       # "all", "trip", "event"
+    location: str = Query(""),
+    difficulty: str = Query(""),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return all events/trips across all communities for the explore page."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    where_parts = []
+    params = []
+    idx = 1
+
+    if event_type and event_type != "all":
+        where_parts.append(f"ce.event_type = ${idx}")
+        params.append(event_type)
+        idx += 1
+
+    if location:
+        where_parts.append(f"LOWER(ce.location) LIKE LOWER(${idx})")
+        params.append(f"%{location}%")
+        idx += 1
+
+    if difficulty and difficulty != "all":
+        where_parts.append(f"ce.difficulty = ${idx}")
+        params.append(difficulty)
+        idx += 1
+
+    where_clause = "WHERE " + " AND ".join(where_parts) if where_parts else ""
+
+    params.append(skip)
+    skip_idx = idx
+    idx += 1
+    params.append(limit)
+    limit_idx = idx
+
+    rows = await pool.fetch(
+        f"""SELECT ce.*, u.name AS creator_name,
+                   c.name AS community_name, c.image_url AS community_image,
+                   EXISTS(SELECT 1 FROM community_event_bookings WHERE event_id = ce.id AND user_id = '{user_id}') AS is_booked,
+                   (SELECT COUNT(*) FROM community_event_bookings WHERE event_id = ce.id) AS participants_count
+            FROM community_events ce
+            JOIN users u ON ce.created_by = u.id
+            JOIN communities c ON ce.community_id = c.id
+            {where_clause}
+            ORDER BY ce.date ASC
+            OFFSET ${skip_idx} LIMIT ${limit_idx}""",
+        *params
+    )
+
+    results = []
+    for row in rows:
+        resp = _event_row_to_response(row, creator_name=row["creator_name"], is_booked=row["is_booked"], participants_count=row["participants_count"])
+        results.append(resp)
+    return results
+
+
+# ── Community Events ─────────────────────────────────────────────────────────
+
+@router.post("/{community_id}/events", response_model=CommunityEventResponse, status_code=status.HTTP_201_CREATED)
+async def create_community_event(
+    community_id: str,
+    data: CommunityEventCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_member(pool, community_id, user_id)
+
+    # Strip timezone info — DB column is timestamp without time zone
+    event_date = data.date.replace(tzinfo=None)
+    end_date = data.end_date.replace(tzinfo=None) if data.end_date else None
+
+    row = await pool.fetchrow(
+        """INSERT INTO community_events (community_id, title, description, location, date, price, slots, image_url, created_by,
+           event_type, duration_days, difficulty, includes, excludes, meeting_point, end_date, max_altitude_m, total_distance_km)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *""",
+        community_id, data.title, data.description, data.location, event_date, data.price, data.slots, data.image_url, user_id,
+        data.event_type, data.duration_days, data.difficulty, data.includes, data.excludes, data.meeting_point, end_date,
+        data.max_altitude_m, data.total_distance_km
+    )
+
+    return _event_row_to_response(row, creator_name=current_user["name"], is_booked=False, participants_count=0)
+
+
+@router.get("/{community_id}/events", response_model=List[CommunityEventResponse])
+async def list_community_events(
+    community_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    rows = await pool.fetch(
+        """SELECT ce.*, u.name AS creator_name,
+                  EXISTS(SELECT 1 FROM community_event_bookings WHERE event_id = ce.id AND user_id = $2) AS is_booked,
+                  (SELECT COUNT(*) FROM community_event_bookings WHERE event_id = ce.id) AS participants_count
+           FROM community_events ce
+           JOIN users u ON ce.created_by = u.id
+           WHERE ce.community_id = $1
+           ORDER BY ce.date ASC""",
+        community_id, user_id
+    )
+
+    return [
+        _event_row_to_response(row, creator_name=row["creator_name"], is_booked=row["is_booked"], participants_count=row["participants_count"])
+        for row in rows
+    ]
+
+
+@router.get("/{community_id}/events/{event_id}", response_model=CommunityEventResponse)
+async def get_community_event(
+    community_id: str,
+    event_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    row = await pool.fetchrow(
+        """SELECT ce.*, u.name AS creator_name,
+                  c.name AS community_name, c.image_url AS community_image,
+                  EXISTS(SELECT 1 FROM community_event_bookings WHERE event_id = ce.id AND user_id = $2) AS is_booked,
+                  (SELECT COUNT(*) FROM community_event_bookings WHERE event_id = ce.id) AS participants_count
+           FROM community_events ce
+           JOIN users u ON ce.created_by = u.id
+           JOIN communities c ON ce.community_id = c.id
+           WHERE ce.id = $1 AND ce.community_id = $3""",
+        event_id, user_id, community_id
+    )
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    return _event_row_to_response(row, creator_name=row["creator_name"], is_booked=row["is_booked"], participants_count=row["participants_count"])
+
+
+@router.put("/{community_id}/events/{event_id}", response_model=CommunityEventResponse)
+async def update_community_event(
+    community_id: str,
+    event_id: str,
+    data: CommunityEventCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    # Strip timezone info — DB column is timestamp without time zone
+    event_date = data.date.replace(tzinfo=None)
+    end_date = data.end_date.replace(tzinfo=None) if data.end_date else None
+
+    row = await pool.fetchrow(
+        """UPDATE community_events
+           SET title=$1, description=$2, location=$3, date=$4, price=$5, slots=$6, image_url=$7,
+               event_type=$8, duration_days=$9, difficulty=$10, includes=$11, excludes=$12,
+               meeting_point=$13, end_date=$14, max_altitude_m=$15, total_distance_km=$16
+           WHERE id = $17 AND community_id = $18 RETURNING *""",
+        data.title, data.description, data.location, event_date, data.price, data.slots, data.image_url,
+        data.event_type, data.duration_days, data.difficulty, data.includes, data.excludes,
+        data.meeting_point, end_date, data.max_altitude_m, data.total_distance_km,
+        event_id, community_id
+    )
+
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    creator = await pool.fetchrow("SELECT name FROM users WHERE id = $1", str(row["created_by"]))
+
+    return _event_row_to_response(row, creator_name=creator["name"] if creator else None, is_booked=False, participants_count=0)
+
+
+@router.delete("/{community_id}/events/{event_id}", status_code=status.HTTP_200_OK)
+async def delete_community_event(
+    community_id: str,
+    event_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    result = await pool.execute(
+        "DELETE FROM community_events WHERE id = $1 AND community_id = $2",
+        event_id, community_id
+    )
+
+    if result == "DELETE 0":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    return {"detail": "Event deleted successfully"}
+
+
+@router.get("/{community_id}/events/{event_id}/participants", response_model=List[EventParticipantResponse])
+async def get_event_participants(
+    community_id: str,
+    event_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+
+    rows = await pool.fetch(
+        """SELECT b.user_id, u.name AS user_name, u.profile_image_url AS user_profile_image, b.created_at AS booked_at
+           FROM community_event_bookings b
+           JOIN users u ON u.id = b.user_id
+           WHERE b.event_id = $1
+           ORDER BY b.created_at ASC""",
+        event_id,
+    )
+
+    return [
+        EventParticipantResponse(
+            user_id=str(row["user_id"]),
+            user_name=row["user_name"],
+            user_profile_image=row["user_profile_image"],
+            booked_at=row["booked_at"],
+        )
+        for row in rows
+    ]
+
+
+@router.post("/{community_id}/events/{event_id}/book", response_model=CommunityEventBookingResponse, status_code=status.HTTP_201_CREATED)
+async def book_community_event(
+    community_id: str,
+    event_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    # Auto-join community if not a member
+    member = await _get_membership(pool, community_id, user_id)
+    if not member:
+        try:
+            await pool.execute(
+                "INSERT INTO community_members (community_id, user_id, role, status) VALUES ($1, $2, 'member', 'active')",
+                community_id, user_id
+            )
+        except Exception:
+            pass  # might already exist with different status
+
+    try:
+        event = await pool.fetchrow(
+            "SELECT * FROM community_events WHERE id = $1 AND community_id = $2",
+            event_id, community_id
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid event ID format")
+
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    existing = await pool.fetchrow(
+        "SELECT id FROM community_event_bookings WHERE event_id = $1 AND user_id = $2",
+        event_id, user_id
+    )
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already booked")
+
+    row = await pool.fetchrow(
+        """INSERT INTO community_event_bookings (event_id, user_id, payment_status, amount)
+           VALUES ($1, $2, 'confirmed', $3) RETURNING *""",
+        event_id, user_id, event["price"]
+    )
+
+    return CommunityEventBookingResponse(
+        id=str(row["id"]),
+        event_id=str(row["event_id"]),
+        user_id=str(row["user_id"]),
+        user_name=current_user["name"],
+        payment_status=row["payment_status"],
+        payment_id=row["payment_id"],
+        amount=row["amount"],
+        created_at=row["created_at"],
+    )
+
+
+# ── Event Itinerary ──────────────────────────────────────────────────────────
+
+@router.get("/{community_id}/events/{event_id}/itinerary", response_model=List[ItineraryDayResponse])
+async def get_event_itinerary(
+    community_id: str,
+    event_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+
+    rows = await pool.fetch(
+        """SELECT * FROM event_itinerary
+           WHERE event_id = $1
+           ORDER BY day_number ASC""",
+        event_id,
+    )
+
+    return [
+        ItineraryDayResponse(
+            id=str(row["id"]),
+            event_id=str(row["event_id"]),
+            day_number=row["day_number"],
+            title=row["title"],
+            description=row["description"],
+            activities=list(row.get("activities") or []),
+            meals_included=list(row.get("meals_included") or []),
+            accommodation=row.get("accommodation", "") or "",
+            distance_km=row.get("distance_km", 0) or 0,
+            elevation_m=row.get("elevation_m", 0) or 0,
+        )
+        for row in rows
+    ]
+
+
+@router.post("/{community_id}/events/{event_id}/itinerary", response_model=ItineraryDayResponse, status_code=status.HTTP_201_CREATED)
+async def add_itinerary_day(
+    community_id: str,
+    event_id: str,
+    data: ItineraryDayCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    # Verify event exists
+    event = await pool.fetchrow(
+        "SELECT id FROM community_events WHERE id = $1 AND community_id = $2",
+        event_id, community_id
+    )
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    row = await pool.fetchrow(
+        """INSERT INTO event_itinerary (event_id, day_number, title, description, activities, meals_included, accommodation, distance_km, elevation_m)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *""",
+        event_id, data.day_number, data.title, data.description, data.activities,
+        data.meals_included, data.accommodation, data.distance_km, data.elevation_m
+    )
+
+    return ItineraryDayResponse(
+        id=str(row["id"]),
+        event_id=str(row["event_id"]),
+        day_number=row["day_number"],
+        title=row["title"],
+        description=row["description"],
+        activities=list(row.get("activities") or []),
+        meals_included=list(row.get("meals_included") or []),
+        accommodation=row.get("accommodation", "") or "",
+        distance_km=row.get("distance_km", 0) or 0,
+        elevation_m=row.get("elevation_m", 0) or 0,
+    )
+
+
+@router.put("/{community_id}/events/{event_id}/itinerary/{day_id}", response_model=ItineraryDayResponse)
+async def update_itinerary_day(
+    community_id: str,
+    event_id: str,
+    day_id: str,
+    data: ItineraryDayCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    row = await pool.fetchrow(
+        """UPDATE event_itinerary
+           SET day_number=$1, title=$2, description=$3, activities=$4, meals_included=$5,
+               accommodation=$6, distance_km=$7, elevation_m=$8
+           WHERE id = $9 AND event_id = $10 RETURNING *""",
+        data.day_number, data.title, data.description, data.activities,
+        data.meals_included, data.accommodation, data.distance_km, data.elevation_m,
+        day_id, event_id
+    )
+
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary day not found")
+
+    return ItineraryDayResponse(
+        id=str(row["id"]),
+        event_id=str(row["event_id"]),
+        day_number=row["day_number"],
+        title=row["title"],
+        description=row["description"],
+        activities=list(row.get("activities") or []),
+        meals_included=list(row.get("meals_included") or []),
+        accommodation=row.get("accommodation", "") or "",
+        distance_km=row.get("distance_km", 0) or 0,
+        elevation_m=row.get("elevation_m", 0) or 0,
+    )
+
+
+@router.delete("/{community_id}/events/{event_id}/itinerary/{day_id}", status_code=status.HTTP_200_OK)
+async def delete_itinerary_day(
+    community_id: str,
+    event_id: str,
+    day_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    result = await pool.execute(
+        "DELETE FROM event_itinerary WHERE id = $1 AND event_id = $2",
+        day_id, event_id
+    )
+
+    if result == "DELETE 0":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary day not found")
+
+    return {"detail": "Itinerary day deleted successfully"}
