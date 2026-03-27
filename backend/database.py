@@ -475,7 +475,7 @@ async def seed_demo_data():
     """Insert demo users, posts, and events if the DB is empty."""
     async with pool.acquire() as conn:
         # Check if demo data already exists
-        count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE email LIKE '%@demo.com'")
+        count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE email LIKE '%@demo.com' OR email LIKE '%@strangermeet.com'")
         if count and count > 0:
             return  # Already seeded
 

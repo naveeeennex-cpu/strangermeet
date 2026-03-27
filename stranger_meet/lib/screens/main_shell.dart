@@ -19,9 +19,9 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   static const _routes = [
     '/main',          // 0 - Home
-    '/conversations', // 1 - Chat
+    '/communities',   // 1 - Communities
     '/explore',       // 2 - Explore (CENTER)
-    '/reels',         // 3 - Reels
+    '/conversations', // 3 - Chat
     '/profile',       // 4 - Profile
   ];
 
@@ -68,28 +68,28 @@ class _MainShellState extends ConsumerState<MainShell> {
                 isActive: _currentIndex == 0,
                 onTap: () => _onTabTapped(0, context),
               ),
-              _NavItemWithBadge(
-                icon: Icons.chat_bubble_outline,
-                activeIcon: Icons.chat_bubble,
-                label: 'Chat',
+              _NavItem(
+                icon: Icons.people_outlined,
+                activeIcon: Icons.people,
+                label: 'Groups',
                 isActive: _currentIndex == 1,
-                badgeCount: ref.watch(unreadCountProvider),
-                onTap: () {
-                  ref.read(unreadCountProvider.notifier).fetchUnreadCount();
-                  _onTabTapped(1, context);
-                },
+                onTap: () => _onTabTapped(1, context),
               ),
               // ── Center Explore FAB ──
               _ExploreFab(
                 isActive: _currentIndex == 2,
                 onTap: () => _onTabTapped(2, context),
               ),
-              _NavItem(
-                icon: Icons.movie_outlined,
-                activeIcon: Icons.movie,
-                label: 'Reels',
+              _NavItemWithBadge(
+                icon: Icons.chat_bubble_outline,
+                activeIcon: Icons.chat_bubble,
+                label: 'Chat',
                 isActive: _currentIndex == 3,
-                onTap: () => _onTabTapped(3, context),
+                badgeCount: ref.watch(unreadCountProvider),
+                onTap: () {
+                  ref.read(unreadCountProvider.notifier).fetchUnreadCount();
+                  _onTabTapped(3, context);
+                },
               ),
               _NavItem(
                 icon: Icons.person_outline,
@@ -199,8 +199,10 @@ class _NavItem extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight:
                     isActive ? FontWeight.w600 : FontWeight.w400,
                 color: isActive
@@ -283,8 +285,10 @@ class _NavItemWithBadge extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight:
                     isActive ? FontWeight.w600 : FontWeight.w400,
                 color: isActive

@@ -4,6 +4,7 @@ class User {
   final String id;
   final String name;
   final String email;
+  final String? username;
   final String? bio;
   final String? phone;
   final List<String> interests;
@@ -16,6 +17,7 @@ class User {
     required this.id,
     required this.name,
     required this.email,
+    this.username,
     this.bio,
     this.phone,
     this.interests = const [],
@@ -30,6 +32,7 @@ class User {
       id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
       name: json['name'] ?? '',
       email: json['email'] ?? '',
+      username: json['username'],
       bio: json['bio'],
       phone: json['phone'],
       interests: json['interests'] != null
@@ -47,6 +50,7 @@ class User {
       'id': id,
       'name': name,
       'email': email,
+      'username': username,
       'bio': bio,
       'phone': phone,
       'interests': interests,
@@ -61,6 +65,7 @@ class User {
     String? id,
     String? name,
     String? email,
+    String? username,
     String? bio,
     String? phone,
     List<String>? interests,
@@ -73,6 +78,7 @@ class User {
       id: id ?? this.id,
       name: name ?? this.name,
       email: email ?? this.email,
+      username: username ?? this.username,
       bio: bio ?? this.bio,
       phone: phone ?? this.phone,
       interests: interests ?? this.interests,

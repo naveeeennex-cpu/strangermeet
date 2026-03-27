@@ -13,6 +13,7 @@ def _row_to_user_response(row) -> UserResponse:
         id=str(row["id"]),
         name=row["name"],
         email=row["email"],
+        username=row.get("username") or None,
         bio=row["bio"] or "",
         phone=row.get("phone", "") or "",
         interests=list(row["interests"]) if row["interests"] else [],
@@ -29,6 +30,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         id=current_user["id"],
         name=current_user["name"],
         email=current_user["email"],
+        username=current_user.get("username") or None,
         bio=current_user.get("bio") or "",
         phone=current_user.get("phone", "") or "",
         interests=list(current_user["interests"]) if current_user.get("interests") else [],
@@ -68,6 +70,22 @@ async def update_me(
         set_parts.append(f"profile_image_url = ${param_idx}")
         params.append(update_data.profile_image_url)
         param_idx += 1
+    if update_data.username is not None:
+        # Check uniqueness of username
+        new_username = update_data.username.lower()
+        existing_username = await pool.fetchrow(
+            "SELECT id FROM users WHERE username = $1 AND id != $2",
+            new_username,
+            current_user["id"],
+        )
+        if existing_username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken",
+            )
+        set_parts.append(f"username = ${param_idx}")
+        params.append(new_username)
+        param_idx += 1
 
     if not set_parts:
         # Nothing to update, return current user
@@ -75,6 +93,7 @@ async def update_me(
             id=current_user["id"],
             name=current_user["name"],
             email=current_user["email"],
+            username=current_user.get("username") or None,
             bio=current_user.get("bio") or "",
             phone=current_user.get("phone", "") or "",
             interests=list(current_user["interests"]) if current_user.get("interests") else [],

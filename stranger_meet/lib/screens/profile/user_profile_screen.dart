@@ -300,6 +300,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 fontSize: 16,
               ),
             ),
+          // Username
+          if (_user?['username'] != null &&
+              _user!['username'].toString().isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              '@${_user!['username']}',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
           // Bio
           if (bio.isNotEmpty) ...[
             const SizedBox(height: 4),

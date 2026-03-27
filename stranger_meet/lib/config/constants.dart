@@ -5,8 +5,8 @@ class AppConstants {
   // For Chrome/Web development:
   static const String baseUrl = 'http://localhost:8000/api';
 
-  // For Android APK (ngrok tunnel) — uncomment & update URL when building APK:
-  // static const String baseUrl = 'https://YOUR-NGROK-URL.ngrok-free.app/api';
+  // Production (Railway):
+  // static const String baseUrl = 'https://strangermeet-production.up.railway.app/api';
 
   static const int pageSize = 20;
 }

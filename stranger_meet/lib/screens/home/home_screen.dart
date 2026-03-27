@@ -24,6 +24,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _scrollController = ScrollController();
+  int _selectedSubTab = 0; // 0 = Posts, 1 = Reels
+  final Set<String> _sentRequests = {};
 
   @override
   void initState() {
@@ -62,7 +64,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final bytes = await pickedFile.readAsBytes();
 
-    // Show caption dialog after picking image
     if (!mounted) return;
     final captionController = TextEditingController();
     bool isUploading = false;
@@ -93,7 +94,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 16),
-                  // Preview
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Image.memory(
@@ -132,7 +132,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               '/upload/story',
                               formData: formData,
                             );
-                            // Refresh stories
                             ref.read(storiesProvider.notifier).fetchStories();
                             if (ctx.mounted) Navigator.pop(ctx);
                             if (mounted) {
@@ -171,15 +170,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
         title: const Text(
           'StrangerMeet',
-          style: TextStyle(fontWeight: FontWeight.w800),
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 22,
+            color: AppTheme.textPrimary,
+          ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search, color: AppTheme.textPrimary),
+            onPressed: () => context.push('/explore'),
+          ),
           Stack(
             children: [
               IconButton(
-                icon: const Icon(Icons.notifications_outlined),
+                icon: const Icon(Icons.notifications_outlined,
+                    color: AppTheme.textPrimary),
                 onPressed: () => context.push('/notifications'),
               ),
               if (pendingCount > 0)
@@ -211,6 +220,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppTheme.primaryColor,
+        onPressed: () => context.push('/create-post'),
+        child: const Icon(Icons.add, color: Colors.black, size: 28),
+      ),
       body: RefreshIndicator(
         color: AppTheme.primaryColor,
         onRefresh: () async {
@@ -219,71 +233,350 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ref.read(storiesProvider.notifier).fetchStories(),
           ]);
         },
-        child: postsState.posts.isEmpty && postsState.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : postsState.posts.isEmpty
-                ? ListView(
-                    children: [
-                      _StoriesRow(
-                        storiesState: storiesState,
-                        onAddStory: _createStoryWithUpload,
-                      ),
-                      SizedBox(
-                        height: MediaQuery.of(context).size.height * 0.5,
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.photo_library_outlined,
-                                  size: 64, color: Colors.grey[400]),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No posts yet',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Be the first to share something!',
-                                style: TextStyle(color: Colors.grey[400]),
-                              ),
-                            ],
-                          ),
+        child: CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+            // "For you" | "Discover" toggle
+            SliverToBoxAdapter(child: _buildForYouDiscoverToggle()),
+
+            // Stories Row
+            SliverToBoxAdapter(
+              child: _StoriesRow(
+                storiesState: storiesState,
+                onAddStory: _createStoryWithUpload,
+              ),
+            ),
+
+            // "Posts" | "Reels" sub-tabs
+            SliverToBoxAdapter(child: _buildPostsReelsTabs()),
+
+            // Content area
+            if (_selectedSubTab == 0) ...[
+              // Posts feed
+              _buildPostsFeed(postsState),
+            ] else ...[
+              // Reels grid
+              SliverToBoxAdapter(child: _buildReelsGrid()),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForYouDiscoverToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[200]!, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              // Already on "For you"
+            },
+            child: Column(
+              children: [
+                const Text(
+                  'For you',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  height: 2.5,
+                  width: 50,
+                  color: AppTheme.textPrimary,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          GestureDetector(
+            onTap: () {
+              context.push('/communities');
+            },
+            child: Column(
+              children: [
+                Text(
+                  'Discover',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey[500],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  height: 2.5,
+                  width: 50,
+                  color: Colors.transparent,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostsReelsTabs() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[200]!, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              if (_selectedSubTab != 0) {
+                setState(() => _selectedSubTab = 0);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  Text(
+                    'Posts',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: _selectedSubTab == 0
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color: _selectedSubTab == 0
+                          ? AppTheme.textPrimary
+                          : Colors.grey[500],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 2.5,
+                    width: 40,
+                    decoration: BoxDecoration(
+                      color: _selectedSubTab == 0
+                          ? AppTheme.primaryColor
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 24),
+          GestureDetector(
+            onTap: () {
+              if (_selectedSubTab != 1) {
+                setState(() => _selectedSubTab = 1);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  Text(
+                    'Reels',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: _selectedSubTab == 1
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color: _selectedSubTab == 1
+                          ? AppTheme.textPrimary
+                          : Colors.grey[500],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 2.5,
+                    width: 40,
+                    decoration: BoxDecoration(
+                      color: _selectedSubTab == 1
+                          ? AppTheme.primaryColor
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostsFeed(dynamic postsState) {
+    if (postsState.posts.isEmpty && postsState.isLoading) {
+      return const SliverFillRemaining(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (postsState.posts.isEmpty) {
+      return SliverFillRemaining(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.photo_library_outlined,
+                  size: 64, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                'No posts yet',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Be the first to share something!',
+                style: TextStyle(color: Colors.grey[400]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index == postsState.posts.length) {
+            if (postsState.hasMore) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return const SizedBox.shrink();
+          }
+          final post = postsState.posts[index];
+          return _PostCard(
+            post: post,
+            sentRequests: _sentRequests,
+            onSendRequest: (userId) {
+              setState(() => _sentRequests.add(userId));
+              ref.read(friendProvider.notifier).sendRequest(userId);
+            },
+          );
+        },
+        childCount:
+            postsState.posts.length + (postsState.hasMore ? 1 : 0),
+      ),
+    );
+  }
+
+  Widget _buildReelsGrid() {
+    // MVP placeholder reels grid
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: 0.65,
+        ),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return GestureDetector(
+            onTap: () => context.push('/reels'),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Stack(
+                children: [
+                  // Placeholder background
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.grey[300]!,
+                            Colors.grey[400]!,
+                          ],
                         ),
                       ),
-                    ],
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    itemCount: postsState.posts.length +
-                        1 +
-                        (postsState.hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return _StoriesRow(
-                          storiesState: storiesState,
-                          onAddStory: _createStoryWithUpload,
-                        );
-                      }
-                      final postIndex = index - 1;
-                      if (postIndex == postsState.posts.length) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      final post = postsState.posts[postIndex];
-                      return _PostCard(post: post);
-                    },
+                      child: Icon(
+                        Icons.videocam_outlined,
+                        size: 48,
+                        color: Colors.grey[500],
+                      ),
+                    ),
                   ),
+                  // Play icon overlay
+                  Center(
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.4),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                  ),
+                  // View count at bottom
+                  Positioned(
+                    bottom: 8,
+                    left: 8,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${(index + 1) * 234}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-class _StoriesRow extends ConsumerWidget {
+// ── Stories Row ──────────────────────────────────────────────────────────────
+
+class _StoriesRow extends ConsumerStatefulWidget {
   final StoriesState storiesState;
   final VoidCallback onAddStory;
 
@@ -293,7 +586,42 @@ class _StoriesRow extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_StoriesRow> createState() => _StoriesRowState();
+}
+
+class _StoriesRowState extends ConsumerState<_StoriesRow> {
+  List<Map<String, dynamic>> _joinedCommunities = [];
+  bool _communitiesLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchJoinedCommunities();
+  }
+
+  Future<void> _fetchJoinedCommunities() async {
+    try {
+      final response = await ApiService().get('/communities/joined');
+      final data = response.data;
+      final List<dynamic> results =
+          data is List ? data : (data['results'] ?? data['communities'] ?? []);
+      if (mounted) {
+        setState(() {
+          _joinedCommunities = results
+              .map((e) => e is Map<String, dynamic> ? e : <String, dynamic>{})
+              .toList();
+          _communitiesLoaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _communitiesLoaded = true);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider);
 
     return Container(
@@ -314,10 +642,10 @@ class _StoriesRow extends ConsumerWidget {
             imageUrl: currentUser?.profileImageUrl,
             label: 'Your Story',
             isAddStory: true,
-            onTap: onAddStory,
+            onTap: widget.onAddStory,
           ),
-          // Other users' stories
-          ...storiesState.userStories.map((userStory) {
+          // Friend stories
+          ...widget.storiesState.userStories.map((userStory) {
             return _StoryCircle(
               imageUrl: userStory.userImage,
               label: userStory.userName,
@@ -327,17 +655,39 @@ class _StoriesRow extends ConsumerWidget {
               },
             );
           }),
+          // Community stories
+          if (_communitiesLoaded)
+            ..._joinedCommunities.map((community) {
+              final id = community['id']?.toString() ??
+                  community['_id']?.toString() ??
+                  '';
+              final name = community['name'] ?? 'Community';
+              final image = community['image_url'] ??
+                  community['imageUrl'] ??
+                  community['image'];
+              return _StoryCircle(
+                imageUrl: image,
+                label: name,
+                isCommunity: true,
+                onTap: () {
+                  context.push('/community/$id');
+                },
+              );
+            }),
         ],
       ),
     );
   }
 }
 
+// ── Story Circle ────────────────────────────────────────────────────────────
+
 class _StoryCircle extends StatelessWidget {
   final String? imageUrl;
   final String label;
   final bool isAddStory;
   final bool hasUnviewed;
+  final bool isCommunity;
   final VoidCallback onTap;
 
   const _StoryCircle({
@@ -345,6 +695,7 @@ class _StoryCircle extends StatelessWidget {
     required this.label,
     this.isAddStory = false,
     this.hasUnviewed = false,
+    this.isCommunity = false,
     required this.onTap,
   });
 
@@ -381,9 +732,8 @@ class _StoryCircle extends StatelessWidget {
                         ? Border.all(color: Colors.grey[300]!, width: 2)
                         : null,
               ),
-              padding: isAddStory
-                  ? EdgeInsets.zero
-                  : const EdgeInsets.all(2.5),
+              padding:
+                  isAddStory ? EdgeInsets.zero : const EdgeInsets.all(2.5),
               child: Stack(
                 children: [
                   Container(
@@ -396,15 +746,17 @@ class _StoryCircle extends StatelessWidget {
                     child: CircleAvatar(
                       radius: 28,
                       backgroundColor: AppTheme.surfaceColor,
-                      backgroundImage: imageUrl != null &&
-                              imageUrl!.isNotEmpty
-                          ? CachedNetworkImageProvider(imageUrl!)
-                          : null,
+                      backgroundImage:
+                          imageUrl != null && imageUrl!.isNotEmpty
+                              ? CachedNetworkImageProvider(imageUrl!)
+                              : null,
                       child: imageUrl == null || imageUrl!.isEmpty
                           ? Icon(
                               isAddStory
                                   ? Icons.camera_alt_outlined
-                                  : Icons.person,
+                                  : isCommunity
+                                      ? Icons.groups
+                                      : Icons.person,
                               color: Colors.grey[500],
                               size: 24,
                             )
@@ -430,6 +782,26 @@ class _StoryCircle extends StatelessWidget {
                         ),
                       ),
                     ),
+                  // Community badge
+                  if (isCommunity && !isAddStory)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.groups,
+                          size: 11,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -451,13 +823,25 @@ class _StoryCircle extends StatelessWidget {
   }
 }
 
+// ── Post Card ───────────────────────────────────────────────────────────────
+
 class _PostCard extends ConsumerWidget {
   final dynamic post;
+  final Set<String> sentRequests;
+  final Function(String) onSendRequest;
 
-  const _PostCard({required this.post});
+  const _PostCard({
+    required this.post,
+    required this.sentRequests,
+    required this.onSendRequest,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currentUser = ref.watch(currentUserProvider);
+    final isOwnPost = currentUser?.id == post.userId;
+    final hasRequested = sentRequests.contains(post.userId);
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0.5),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
@@ -468,119 +852,152 @@ class _PostCard extends ConsumerWidget {
           children: [
             // User header
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
               child: Row(
                 children: [
+                  // Avatar
                   GestureDetector(
                     onTap: () => context.push('/user/${post.userId}'),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: AppTheme.surfaceColor,
-                          backgroundImage: post.userImage != null
-                              ? CachedNetworkImageProvider(post.userImage!)
-                              : null,
-                          child: post.userImage == null
-                              ? Text(
-                                  post.userName.isNotEmpty
-                                      ? post.userName[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: AppTheme.surfaceColor,
+                      backgroundImage: post.userImage != null
+                          ? CachedNetworkImageProvider(post.userImage!)
+                          : null,
+                      child: post.userImage == null
+                          ? Text(
+                              post.userName.isNotEmpty
+                                  ? post.userName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Name + community + time
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => context.push('/user/${post.userId}'),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
                               post.userName,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 14,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            if (post.createdAt != null)
-                              Text(
-                                timeago.format(post.createdAt!),
+                          ),
+                          Text(
+                            '  \u00b7  in ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          Text(
+                            'StrangerMeet',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          if (post.createdAt != null) ...[
+                            Text(
+                              '  \u00b7  ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                            Text(
+                              timeago.format(post.createdAt!,
+                                  locale: 'en_short'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Connect button
+                  if (!isOwnPost)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: hasRequested
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                border:
+                                    Border.all(color: Colors.grey[400]!),
+                              ),
+                              child: Text(
+                                'Requested',
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                   color: Colors.grey[500],
                                 ),
                               ),
-                          ],
-                        ),
-                      ],
+                            )
+                          : GestureDetector(
+                              onTap: () => onSendRequest(post.userId),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                      color: AppTheme.primaryColor,
+                                      width: 1.5),
+                                ),
+                                child: const Text(
+                                  'Connect',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
-                  ),
-                  const Spacer(),
+                  // More options
                   IconButton(
                     icon: const Icon(Icons.more_horiz, size: 20),
                     onPressed: () {
-                      final currentUser = ref.read(currentUserProvider);
-                      final isOwner = currentUser?.id == post.userId;
-                      showModalBottomSheet(
-                        context: context,
-                        useRootNavigator: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                        ),
-                        builder: (ctx) => SafeArea(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const SizedBox(height: 8),
-                              Container(
-                                width: 40, height: 4,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              if (isOwner) ...[
-                                ListTile(
-                                  leading: const Icon(Icons.edit_outlined),
-                                  title: const Text('Edit Post'),
-                                  onTap: () {
-                                    Navigator.pop(ctx);
-                                    _showEditPostDialog(context, ref, post);
-                                  },
-                                ),
-                                ListTile(
-                                  leading: const Icon(Icons.delete_outline, color: Colors.red),
-                                  title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
-                                  onTap: () {
-                                    Navigator.pop(ctx);
-                                    _showDeleteConfirm(context, ref, post.id);
-                                  },
-                                ),
-                              ] else ...[
-                                ListTile(
-                                  leading: const Icon(Icons.flag_outlined),
-                                  title: const Text('Report Post'),
-                                  onTap: () {
-                                    Navigator.pop(ctx);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Post reported')),
-                                    );
-                                  },
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                            ],
-                          ),
-                        ),
-                      );
+                      _showOptionsSheet(context, ref);
                     },
                   ),
                 ],
               ),
             ),
+
+            // Caption (before image)
+            if (post.caption.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  post.caption,
+                  style: const TextStyle(fontSize: 14),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+
             // Image
             if (post.imageUrl != null)
               CachedNetworkImage(
@@ -596,51 +1013,105 @@ class _PostCard extends ConsumerWidget {
                 errorWidget: (context, url, error) => Container(
                   height: 300,
                   color: AppTheme.surfaceColor,
-                  child: const Icon(Icons.broken_image_outlined, size: 48),
+                  child:
+                      const Icon(Icons.broken_image_outlined, size: 48),
                 ),
               ),
-            // Caption
-            if (post.caption.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Text(
-                  post.caption,
-                  style: const TextStyle(fontSize: 14),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            // Actions
+
+            // Actions row
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: Icon(
-                      post.isLiked ? Icons.favorite : Icons.favorite_border,
-                      color: post.isLiked ? Colors.red : null,
-                    ),
-                    onPressed: () {
-                      ref.read(postsProvider.notifier).toggleLike(post.id);
+                  // Like
+                  GestureDetector(
+                    onTap: () {
+                      ref
+                          .read(postsProvider.notifier)
+                          .toggleLike(post.id);
                     },
+                    child: Row(
+                      children: [
+                        Icon(
+                          post.isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          color: post.isLiked ? Colors.red : Colors.grey[600],
+                          size: 22,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${post.likesCount}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  Text(
-                    '${post.likesCount}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  const SizedBox(width: 20),
+                  // React
+                  GestureDetector(
+                    onTap: () {
+                      // MVP: no functionality
+                    },
+                    child: Row(
+                      children: [
+                        Icon(Icons.emoji_emotions_outlined,
+                            size: 21, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          'React',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 16),
-                  IconButton(
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    onPressed: () => context.push('/post/${post.id}'),
-                  ),
-                  Text(
-                    '${post.commentsCount}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  const SizedBox(width: 20),
+                  // Comment
+                  GestureDetector(
+                    onTap: () => context.push('/post/${post.id}'),
+                    child: Row(
+                      children: [
+                        Icon(Icons.chat_bubble_outline,
+                            size: 20, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${post.commentsCount}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.share_outlined),
-                    onPressed: () {},
+                  // Share
+                  GestureDetector(
+                    onTap: () {},
+                    child: Row(
+                      children: [
+                        Icon(Icons.share_outlined,
+                            size: 20, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Share',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -651,7 +1122,69 @@ class _PostCard extends ConsumerWidget {
     );
   }
 
-  void _showEditPostDialog(BuildContext context, WidgetRef ref, dynamic post) {
+  void _showOptionsSheet(BuildContext context, WidgetRef ref) {
+    final currentUser = ref.read(currentUserProvider);
+    final isOwner = currentUser?.id == post.userId;
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (isOwner) ...[
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit Post'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showEditPostDialog(context, ref, post);
+                },
+              ),
+              ListTile(
+                leading:
+                    const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete Post',
+                    style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showDeleteConfirm(context, ref, post.id);
+                },
+              ),
+            ] else ...[
+              ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: const Text('Report Post'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Post reported')),
+                  );
+                },
+              ),
+            ],
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditPostDialog(
+      BuildContext context, WidgetRef ref, dynamic post) {
     final controller = TextEditingController(text: post.caption);
     showDialog(
       context: context,
@@ -700,23 +1233,28 @@ class _PostCard extends ConsumerWidget {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, WidgetRef ref, String postId) {
+  void _showDeleteConfirm(
+      BuildContext context, WidgetRef ref, String postId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Post'),
-        content: const Text('Are you sure you want to delete this post? This cannot be undone.'),
+        content: const Text(
+            'Are you sure you want to delete this post? This cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await ref.read(postsProvider.notifier).deletePost(postId);
+                await ref
+                    .read(postsProvider.notifier)
+                    .deletePost(postId);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Post deleted')),
@@ -730,7 +1268,8 @@ class _PostCard extends ConsumerWidget {
                 }
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

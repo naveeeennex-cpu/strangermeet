@@ -20,6 +20,7 @@ import '../screens/profile/edit_profile_screen.dart';
 import '../screens/profile/user_profile_screen.dart';
 import '../screens/profile/friend_requests_screen.dart';
 import '../screens/home/story_viewer_screen.dart';
+import '../screens/community/communities_list_screen.dart';
 import '../screens/community/community_detail_screen.dart';
 import '../screens/community/community_event_detail_screen.dart';
 import '../screens/community/community_chat_screen.dart';
@@ -72,6 +73,12 @@ final router = GoRouter(
           path: '/main',
           pageBuilder: (context, state) => const NoTransitionPage(
             child: HomeScreen(),
+          ),
+        ),
+        GoRoute(
+          path: '/communities',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: CommunitiesListScreen(),
           ),
         ),
         GoRoute(

@@ -1070,6 +1070,34 @@ def _event_row_to_response(row, creator_name=None, is_booked=False, participants
     )
 
 
+# ── Nearby cities map (Indian cities within ~500km radius) ────────────────────
+
+NEARBY_CITIES = {
+    "chennai": ["chennai", "bangalore", "bengaluru", "pondicherry", "vellore", "coimbatore", "madurai", "mysore", "mysuru", "tirupati", "hyderabad"],
+    "bangalore": ["bangalore", "bengaluru", "mysore", "mysuru", "chennai", "coimbatore", "mangalore", "mangaluru", "hyderabad", "ooty", "kodaikanal"],
+    "bengaluru": ["bangalore", "bengaluru", "mysore", "mysuru", "chennai", "coimbatore", "mangalore", "mangaluru", "hyderabad", "ooty", "kodaikanal"],
+    "mumbai": ["mumbai", "pune", "lonavala", "nashik", "goa", "alibaug", "mahabaleshwar", "lavasa", "kolhapur", "aurangabad"],
+    "pune": ["pune", "mumbai", "lonavala", "mahabaleshwar", "lavasa", "nashik", "kolhapur", "goa", "alibaug"],
+    "delhi": ["delhi", "new delhi", "gurgaon", "gurugram", "noida", "agra", "jaipur", "chandigarh", "manali", "shimla", "rishikesh", "dehradun", "haridwar", "mussoorie"],
+    "new delhi": ["delhi", "new delhi", "gurgaon", "gurugram", "noida", "agra", "jaipur", "chandigarh", "manali", "shimla", "rishikesh", "dehradun"],
+    "hyderabad": ["hyderabad", "bangalore", "bengaluru", "chennai", "warangal", "vijayawada", "tirupati"],
+    "kolkata": ["kolkata", "darjeeling", "siliguri", "gangtok", "puri", "bhubaneswar"],
+    "goa": ["goa", "mumbai", "pune", "mangalore", "mangaluru", "belgaum"],
+    "jaipur": ["jaipur", "delhi", "udaipur", "jodhpur", "pushkar", "ajmer", "mount abu"],
+    "ahmedabad": ["ahmedabad", "gandhinagar", "vadodara", "surat", "rajkot", "mount abu", "udaipur"],
+    "chandigarh": ["chandigarh", "delhi", "shimla", "manali", "amritsar", "dharamshala", "mcleodganj"],
+    "manali": ["manali", "shimla", "dharamshala", "mcleodganj", "kullu", "delhi", "chandigarh", "leh", "ladakh"],
+    "shimla": ["shimla", "manali", "chandigarh", "delhi", "dharamshala", "mcleodganj", "kasauli"],
+    "kochi": ["kochi", "cochin", "munnar", "alleppey", "alappuzha", "trivandrum", "thiruvananthapuram", "thekkady", "wayanad"],
+}
+
+
+def _get_nearby_cities(city: str) -> list:
+    """Get list of nearby cities for a given city."""
+    city_lower = city.lower().strip()
+    return NEARBY_CITIES.get(city_lower, [city_lower])
+
+
 # ── Global Explore: All trips & events ────────────────────────────────────────
 
 @router.get("/explore/all-events", response_model=List[CommunityEventResponse])
@@ -1082,7 +1110,8 @@ async def explore_all_events(
     limit: int = Query(50, ge=1, le=100),
     current_user: dict = Depends(get_current_user),
 ):
-    """Return all events/trips across all communities for the explore page."""
+    """Return all events/trips across all communities for the explore page.
+    When location is provided, shows events from nearby cities too, sorted by proximity."""
     pool = request.app.state.pool
     user_id = current_user["id"]
 
@@ -1095,10 +1124,17 @@ async def explore_all_events(
         params.append(event_type)
         idx += 1
 
+    # Location: search in nearby cities, not just exact match
+    nearby_cities = []
     if location:
-        where_parts.append(f"LOWER(ce.location) LIKE LOWER(${idx})")
-        params.append(f"%{location}%")
-        idx += 1
+        nearby_cities = _get_nearby_cities(location)
+        # Build OR conditions for each nearby city
+        city_conditions = []
+        for city in nearby_cities:
+            city_conditions.append(f"LOWER(ce.location) LIKE LOWER(${idx})")
+            params.append(f"%{city}%")
+            idx += 1
+        where_parts.append(f"({' OR '.join(city_conditions)})")
 
     if difficulty and difficulty != "all":
         where_parts.append(f"ce.difficulty = ${idx}")
@@ -1106,6 +1142,15 @@ async def explore_all_events(
         idx += 1
 
     where_clause = "WHERE " + " AND ".join(where_parts) if where_parts else ""
+
+    # Sort: if location provided, prioritize exact city match first
+    order_clause = "ORDER BY ce.date ASC"
+    if location and nearby_cities:
+        # Events in the exact city come first, then nearby
+        primary_city = nearby_cities[0]
+        order_clause = f"""ORDER BY
+            CASE WHEN LOWER(ce.location) LIKE LOWER('%{primary_city}%') THEN 0 ELSE 1 END,
+            ce.date ASC"""
 
     params.append(skip)
     skip_idx = idx
@@ -1122,7 +1167,7 @@ async def explore_all_events(
             JOIN users u ON ce.created_by = u.id
             JOIN communities c ON ce.community_id = c.id
             {where_clause}
-            ORDER BY ce.date ASC
+            {order_clause}
             OFFSET ${skip_idx} LIMIT ${limit_idx}""",
         *params
     )

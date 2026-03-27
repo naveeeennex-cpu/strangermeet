@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
 import '../../services/websocket_service.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
@@ -16,12 +19,19 @@ class SignupScreen extends ConsumerStatefulWidget {
 class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _orgNameController = TextEditingController();
   bool _obscurePassword = true;
   String _selectedRole = 'customer';
+
+  // Username availability
+  final _usernameRegex = RegExp(r'^[a-z0-9_.]+$');
+  bool? _isUsernameAvailable;
+  bool _isCheckingUsername = false;
+  Timer? _usernameDebounce;
 
   final List<String> _allInterests = [
     'Music',
@@ -42,11 +52,44 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     _orgNameController.dispose();
+    _usernameDebounce?.cancel();
     super.dispose();
+  }
+
+  void _onUsernameChanged(String value) {
+    _usernameDebounce?.cancel();
+    final trimmed = value.trim().toLowerCase();
+    if (trimmed.length < 3 || !_usernameRegex.hasMatch(trimmed)) {
+      setState(() {
+        _isUsernameAvailable = null;
+        _isCheckingUsername = false;
+      });
+      return;
+    }
+    setState(() => _isCheckingUsername = true);
+    _usernameDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final response = await ApiService().get('/auth/check-username/$trimmed');
+        if (mounted) {
+          setState(() {
+            _isUsernameAvailable = response.data['available'] == true;
+            _isCheckingUsername = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _isUsernameAvailable = null;
+            _isCheckingUsername = false;
+          });
+        }
+      }
+    });
   }
 
   Future<void> _signup() async {
@@ -56,6 +99,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           name: _nameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
+          username: _usernameController.text.trim().toLowerCase(),
           phone: _phoneController.text.trim(),
           interests: _selectedInterests.toList(),
           role: _selectedRole,
@@ -223,6 +267,50 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your name';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _usernameController,
+                  keyboardType: TextInputType.text,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    hintText: 'Choose a username',
+                    prefixIcon: const Icon(Icons.alternate_email),
+                    suffixIcon: _isCheckingUsername
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : _isUsernameAvailable == true
+                            ? const Icon(Icons.check_circle, color: Colors.green)
+                            : _isUsernameAvailable == false
+                                ? const Icon(Icons.cancel, color: Colors.red)
+                                : null,
+                  ),
+                  onChanged: _onUsernameChanged,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please choose a username';
+                    }
+                    if (value.trim().length < 3) {
+                      return 'Username must be at least 3 characters';
+                    }
+                    if (value.trim().length > 30) {
+                      return 'Username must be at most 30 characters';
+                    }
+                    if (!_usernameRegex.hasMatch(value.trim().toLowerCase())) {
+                      return 'Only lowercase letters, numbers, _ and . allowed';
+                    }
+                    if (_isUsernameAvailable == false) {
+                      return 'Username is already taken';
                     }
                     return null;
                   },
