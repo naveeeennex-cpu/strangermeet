@@ -6,6 +6,8 @@ from datetime import datetime
 class StoryCreate(BaseModel):
     image_url: str
     caption: str = ""
+    media_type: str = "image"
+    video_url: Optional[str] = None
 
 
 class StoryResponse(BaseModel):
@@ -15,6 +17,8 @@ class StoryResponse(BaseModel):
     user_image: Optional[str] = None
     image_url: str
     caption: str = ""
+    media_type: str = "image"
+    video_url: Optional[str] = None
     views_count: int = 0
     is_viewed: bool = False
     created_at: datetime

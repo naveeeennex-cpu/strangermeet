@@ -7,6 +7,8 @@ class Post {
   final String? userImage;
   final String? imageUrl;
   final String caption;
+  final String mediaType; // 'image', 'video', 'text'
+  final String? videoUrl;
   final int likesCount;
   final bool isLiked;
   final int commentsCount;
@@ -19,6 +21,8 @@ class Post {
     this.userImage,
     this.imageUrl,
     required this.caption,
+    this.mediaType = 'image',
+    this.videoUrl,
     this.likesCount = 0,
     this.isLiked = false,
     this.commentsCount = 0,
@@ -33,6 +37,8 @@ class Post {
       userImage: json['user_profile_image'] ?? json['user_image'] ?? json['userImage'],
       imageUrl: json['image_url'] ?? json['imageUrl'],
       caption: json['caption'] ?? '',
+      mediaType: json['media_type'] ?? json['mediaType'] ?? 'image',
+      videoUrl: json['video_url'] ?? json['videoUrl'],
       likesCount: json['likes_count'] ?? json['likesCount'] ?? 0,
       isLiked: json['is_liked'] ?? json['isLiked'] ?? false,
       commentsCount: json['comments_count'] ?? json['commentsCount'] ?? 0,
@@ -48,6 +54,8 @@ class Post {
       'user_image': userImage,
       'image_url': imageUrl,
       'caption': caption,
+      'media_type': mediaType,
+      'video_url': videoUrl,
       'likes_count': likesCount,
       'is_liked': isLiked,
       'comments_count': commentsCount,
@@ -62,6 +70,8 @@ class Post {
     String? userImage,
     String? imageUrl,
     String? caption,
+    String? mediaType,
+    String? videoUrl,
     int? likesCount,
     bool? isLiked,
     int? commentsCount,
@@ -74,6 +84,8 @@ class Post {
       userImage: userImage ?? this.userImage,
       imageUrl: imageUrl ?? this.imageUrl,
       caption: caption ?? this.caption,
+      mediaType: mediaType ?? this.mediaType,
+      videoUrl: videoUrl ?? this.videoUrl,
       likesCount: likesCount ?? this.likesCount,
       isLiked: isLiked ?? this.isLiked,
       commentsCount: commentsCount ?? this.commentsCount,

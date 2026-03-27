@@ -422,6 +422,7 @@ async def websocket_chat(websocket: WebSocket, token: str):
                     "timestamp": row["timestamp"].isoformat(),
                     "is_read": False,
                     "sender_name": user["name"],
+                    "sender_image": user.get("profile_image_url") or "",
                     "image_url": row["image_url"] or "",
                     "message_type": row["message_type"] or "text",
                 }

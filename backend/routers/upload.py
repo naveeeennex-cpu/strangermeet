@@ -11,6 +11,7 @@ from services.storage import storage
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_VIDEO_FILE_SIZE = 100 * 1024 * 1024  # 100MB for videos
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime"}
 
@@ -60,37 +61,59 @@ async def upload_file(
 async def upload_and_create_post(
     request: Request,
     caption: str = Form(""),
-    image: UploadFile = File(...),
+    media_type: str = Form("image"),
+    image: Optional[UploadFile] = File(None),
+    video: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
 ):
-    """Upload image and create a post in one request."""
+    """Upload image or video and create a post in one request."""
     pool = request.app.state.pool
     user_id = current_user["id"]
 
-    # Upload image
-    file_data = await image.read()
-    if len(file_data) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+    image_url = ""
+    video_url = ""
 
-    try:
-        image_url = await storage.upload_file(
-            file_data=file_data,
-            original_filename=image.filename or "post.jpg",
-            folder="posts",
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    if media_type == "video" and video:
+        # Upload video
+        file_data = await video.read()
+        if len(file_data) > MAX_VIDEO_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="Video too large (max 100MB)")
+
+        try:
+            video_url = await storage.upload_file(
+                file_data=file_data,
+                original_filename=video.filename or "post.mp4",
+                folder="posts/videos",
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    elif image:
+        # Upload image
+        file_data = await image.read()
+        if len(file_data) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+
+        try:
+            image_url = await storage.upload_file(
+                file_data=file_data,
+                original_filename=image.filename or "post.jpg",
+                folder="posts",
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
     # Create post in DB
     row = await pool.fetchrow(
         """
-        INSERT INTO posts (user_id, image_url, caption)
-        VALUES ($1, $2, $3)
+        INSERT INTO posts (user_id, image_url, caption, media_type, video_url)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         """,
         user_id,
         image_url,
         caption,
+        media_type,
+        video_url,
     )
 
     return {
@@ -100,6 +123,8 @@ async def upload_and_create_post(
         "user_profile_image": current_user.get("profile_image_url"),
         "image_url": image_url,
         "caption": caption,
+        "media_type": media_type,
+        "video_url": video_url,
         "likes_count": 0,
         "is_liked": False,
         "comments_count": 0,
@@ -175,36 +200,62 @@ async def upload_cover_image(
 @router.post("/story")
 async def upload_story(
     request: Request,
-    image: UploadFile = File(...),
     caption: str = Form(""),
+    media_type: str = Form("image"),
+    image: Optional[UploadFile] = File(None),
+    video: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
 ):
-    """Upload image and create a story."""
+    """Upload image or video and create a story."""
     pool = request.app.state.pool
     user_id = current_user["id"]
 
-    file_data = await image.read()
-    if len(file_data) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+    image_url = ""
+    video_url = ""
 
-    try:
-        image_url = await storage.upload_file(
-            file_data=file_data,
-            original_filename=image.filename or "story.jpg",
-            folder="stories",
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    if media_type == "video" and video:
+        # Upload video
+        file_data = await video.read()
+        if len(file_data) > MAX_VIDEO_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="Video too large (max 100MB)")
+
+        try:
+            video_url = await storage.upload_file(
+                file_data=file_data,
+                original_filename=video.filename or "story.mp4",
+                folder="stories/videos",
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        # Use a placeholder for image_url since the column is NOT NULL
+        image_url = video_url
+    elif image:
+        file_data = await image.read()
+        if len(file_data) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+
+        try:
+            image_url = await storage.upload_file(
+                file_data=file_data,
+                original_filename=image.filename or "story.jpg",
+                folder="stories",
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    else:
+        raise HTTPException(status_code=400, detail="No file provided")
 
     row = await pool.fetchrow(
         """
-        INSERT INTO stories (user_id, image_url, caption)
-        VALUES ($1, $2, $3)
+        INSERT INTO stories (user_id, image_url, caption, media_type, video_url)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         """,
         user_id,
         image_url,
         caption,
+        media_type,
+        video_url,
     )
 
     return {
@@ -212,5 +263,7 @@ async def upload_story(
         "user_id": str(row["user_id"]),
         "image_url": image_url,
         "caption": caption,
+        "media_type": media_type,
+        "video_url": video_url,
         "created_at": row["created_at"].isoformat(),
     }

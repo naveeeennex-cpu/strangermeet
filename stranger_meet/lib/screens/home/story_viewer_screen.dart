@@ -8,6 +8,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../config/theme.dart';
 import '../../models/story.dart';
 import '../../providers/story_provider.dart';
+import '../../widgets/video_player_widget.dart';
 
 class StoryViewerScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -197,19 +198,29 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Story image
-            CachedNetworkImage(
-              imageUrl: story.imageUrl,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              placeholder: (context, url) => const Center(
-                child: CircularProgressIndicator(color: Colors.white),
+            // Story media: video or image
+            if (story.mediaType == 'video' &&
+                story.videoUrl != null &&
+                story.videoUrl!.isNotEmpty)
+              VideoPlayerWidget(
+                videoUrl: story.videoUrl!,
+                autoPlay: true,
+                looping: true,
+                showControls: false,
+              )
+            else
+              CachedNetworkImage(
+                imageUrl: story.imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                placeholder: (context, url) => const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+                errorWidget: (context, url, error) => const Center(
+                  child: Icon(Icons.broken_image, color: Colors.white, size: 64),
+                ),
               ),
-              errorWidget: (context, url, error) => const Center(
-                child: Icon(Icons.broken_image, color: Colors.white, size: 64),
-              ),
-            ),
 
             // Gradient overlays
             Positioned(

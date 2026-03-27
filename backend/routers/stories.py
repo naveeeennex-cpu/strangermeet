@@ -17,6 +17,8 @@ def _row_to_story_response(row, viewed_story_ids: set = None) -> StoryResponse:
         user_image=row.get("user_image") or None,
         image_url=row["image_url"],
         caption=row.get("caption") or "",
+        media_type=row.get("media_type") or "image",
+        video_url=row.get("video_url") or None,
         views_count=row.get("views_count", 0),
         is_viewed=story_id in (viewed_story_ids or set()),
         created_at=row["created_at"],
@@ -36,13 +38,15 @@ async def create_story(
     try:
         row = await pool.fetchrow(
             """
-            INSERT INTO stories (user_id, image_url, caption)
-            VALUES ($1, $2, $3)
+            INSERT INTO stories (user_id, image_url, caption, media_type, video_url)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING *
             """,
             user_id,
             story_data.image_url,
             story_data.caption,
+            getattr(story_data, 'media_type', 'image') or 'image',
+            getattr(story_data, 'video_url', '') or '',
         )
     except Exception as e:
         raise HTTPException(
@@ -57,6 +61,8 @@ async def create_story(
         user_image=current_user.get("profile_image_url") or None,
         image_url=row["image_url"],
         caption=row["caption"] or "",
+        media_type=row.get("media_type") or "image",
+        video_url=row.get("video_url") or None,
         views_count=0,
         is_viewed=False,
         created_at=row["created_at"],

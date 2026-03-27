@@ -14,6 +14,7 @@ import '../../providers/friend_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../models/story.dart';
 import '../../services/api_service.dart';
+import '../../widgets/video_player_widget.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -53,13 +54,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _createStoryWithUpload() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1080,
-      maxHeight: 1920,
-      imageQuality: 85,
+    if (!mounted) return;
+
+    // Show picker choice: Photo or Video
+    final mediaChoice = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Add Story',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photo'),
+              onTap: () => Navigator.pop(ctx, 'image'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Video'),
+              onTap: () => Navigator.pop(ctx, 'video'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+
+    if (mediaChoice == null || !mounted) return;
+
+    final picker = ImagePicker();
+    XFile? pickedFile;
+
+    if (mediaChoice == 'video') {
+      pickedFile = await picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: 30),
+      );
+    } else {
+      pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1080,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+    }
     if (pickedFile == null) return;
 
     final bytes = await pickedFile.readAsBytes();
@@ -89,20 +140,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Add Story',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                  Text(
+                    mediaChoice == 'video' ? 'Add Video Story' : 'Add Story',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 16),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.memory(
-                      bytes,
+                  if (mediaChoice == 'video')
+                    Container(
                       width: double.infinity,
                       height: 200,
-                      fit: BoxFit.cover,
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.videocam, color: Colors.white54, size: 48),
+                            SizedBox(height: 8),
+                            Text('Video selected',
+                                style: TextStyle(color: Colors.white54)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        bytes,
+                        width: double.infinity,
+                        height: 200,
+                        fit: BoxFit.cover,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: captionController,
@@ -122,11 +194,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           setModalState(() => isUploading = true);
                           try {
                             final formData = FormData.fromMap({
-                              'image': MultipartFile.fromBytes(
-                                bytes,
-                                filename: pickedFile.name,
-                              ),
+                              if (mediaChoice == 'video')
+                                'video': MultipartFile.fromBytes(
+                                  bytes,
+                                  filename: pickedFile!.name,
+                                )
+                              else
+                                'image': MultipartFile.fromBytes(
+                                  bytes,
+                                  filename: pickedFile!.name,
+                                ),
                               'caption': captionController.text.trim(),
+                              'media_type': mediaChoice,
                             });
                             await ApiService().uploadFile(
                               '/upload/story',
@@ -481,7 +560,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildReelsGrid() {
-    // MVP placeholder reels grid
+    final postsState = ref.watch(postsProvider);
+    final videoPosts = postsState.posts
+        .where((p) => p.mediaType == 'video' && p.videoUrl != null && p.videoUrl!.isNotEmpty)
+        .toList();
+
+    if (videoPosts.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.videocam_off_outlined, size: 64, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                'No reels yet',
+                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Be the first to share a video!',
+                style: TextStyle(color: Colors.grey[400]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(8),
       child: GridView.builder(
@@ -493,10 +599,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           mainAxisSpacing: 8,
           childAspectRatio: 0.65,
         ),
-        itemCount: 6,
+        itemCount: videoPosts.length,
         itemBuilder: (context, index) {
+          final post = videoPosts[index];
           return GestureDetector(
-            onTap: () => context.push('/reels'),
+            onTap: () => context.push('/post/${post.id}'),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.grey[200],
@@ -504,25 +611,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               child: Stack(
                 children: [
-                  // Placeholder background
+                  // Thumbnail or gradient background
                   Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.grey[300]!,
-                            Colors.grey[400]!,
-                          ],
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.videocam_outlined,
-                        size: 48,
-                        color: Colors.grey[500],
-                      ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: post.imageUrl != null && post.imageUrl!.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: post.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.grey[300]!, Colors.grey[400]!],
+                                  ),
+                                ),
+                                child: Icon(Icons.videocam_outlined,
+                                    size: 48, color: Colors.grey[500]),
+                              ),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.grey[300]!, Colors.grey[400]!],
+                                ),
+                              ),
+                              child: Icon(Icons.videocam_outlined,
+                                  size: 48, color: Colors.grey[500]),
+                            ),
                     ),
                   ),
                   // Play icon overlay
@@ -541,27 +660,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                   ),
-                  // View count at bottom
+                  // Caption + likes at bottom
                   Positioned(
-                    bottom: 8,
-                    left: 8,
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.play_arrow,
-                          color: Colors.white,
-                          size: 16,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.vertical(
+                            bottom: Radius.circular(12)),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.7),
+                          ],
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${(index + 1) * 234}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (post.caption.isNotEmpty)
+                            Text(
+                              post.caption,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.favorite,
+                                  color: Colors.white, size: 14),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${post.likesCount}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -825,7 +974,7 @@ class _StoryCircle extends StatelessWidget {
 
 // ── Post Card ───────────────────────────────────────────────────────────────
 
-class _PostCard extends ConsumerWidget {
+class _PostCard extends ConsumerStatefulWidget {
   final dynamic post;
   final Set<String> sentRequests;
   final Function(String) onSendRequest;
@@ -837,10 +986,30 @@ class _PostCard extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PostCard> createState() => _PostCardState();
+}
+
+class _PostCardState extends ConsumerState<_PostCard>
+    with SingleTickerProviderStateMixin {
+  bool _showHeart = false;
+
+  void _onDoubleTap() {
+    final post = widget.post;
+    if (!post.isLiked) {
+      ref.read(postsProvider.notifier).toggleLike(post.id);
+    }
+    setState(() => _showHeart = true);
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) setState(() => _showHeart = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final post = widget.post;
     final currentUser = ref.watch(currentUserProvider);
     final isOwnPost = currentUser?.id == post.userId;
-    final hasRequested = sentRequests.contains(post.userId);
+    final hasRequested = widget.sentRequests.contains(post.userId);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0.5),
@@ -855,9 +1024,15 @@ class _PostCard extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
               child: Row(
                 children: [
-                  // Avatar
+                  // Avatar — own post goes to profile, others go to user profile
                   GestureDetector(
-                    onTap: () => context.push('/user/${post.userId}'),
+                    onTap: () {
+                      if (isOwnPost) {
+                        context.go('/profile');
+                      } else {
+                        context.push('/user/${post.userId}');
+                      }
+                    },
                     child: CircleAvatar(
                       radius: 20,
                       backgroundColor: AppTheme.surfaceColor,
@@ -881,7 +1056,13 @@ class _PostCard extends ConsumerWidget {
                   // Name + community + time
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => context.push('/user/${post.userId}'),
+                      onTap: () {
+                        if (isOwnPost) {
+                          context.go('/profile');
+                        } else {
+                          context.push('/user/${post.userId}');
+                        }
+                      },
                       child: Row(
                         children: [
                           Flexible(
@@ -931,7 +1112,7 @@ class _PostCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  // Connect button
+                  // Connect button — only for others' posts
                   if (!isOwnPost)
                     Padding(
                       padding: const EdgeInsets.only(left: 4),
@@ -954,7 +1135,7 @@ class _PostCard extends ConsumerWidget {
                               ),
                             )
                           : GestureDetector(
-                              onTap: () => onSendRequest(post.userId),
+                              onTap: () => widget.onSendRequest(post.userId),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 4),
@@ -998,23 +1179,107 @@ class _PostCard extends ConsumerWidget {
                 ),
               ),
 
-            // Image
-            if (post.imageUrl != null)
-              CachedNetworkImage(
-                imageUrl: post.imageUrl!,
-                width: double.infinity,
-                height: 300,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  height: 300,
-                  color: AppTheme.surfaceColor,
-                  child: const Center(child: CircularProgressIndicator()),
+            // Media: Video or Image with double-tap like
+            if (post.mediaType == 'video' &&
+                post.videoUrl != null &&
+                post.videoUrl!.isNotEmpty)
+              GestureDetector(
+                onDoubleTap: _onDoubleTap,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    VideoPlayerWidget(
+                      videoUrl: post.videoUrl!,
+                      autoPlay: false,
+                      showControls: true,
+                      aspectRatio: 16 / 9,
+                    ),
+                    // Video icon badge
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.videocam,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                    // Heart animation overlay
+                    AnimatedOpacity(
+                      opacity: _showHeart ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: AnimatedScale(
+                        scale: _showHeart ? 1.0 : 0.5,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.elasticOut,
+                        child: const Icon(
+                          Icons.favorite,
+                          color: Colors.white,
+                          size: 80,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black38,
+                              blurRadius: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                errorWidget: (context, url, error) => Container(
-                  height: 300,
-                  color: AppTheme.surfaceColor,
-                  child:
-                      const Icon(Icons.broken_image_outlined, size: 48),
+              )
+            else if (post.imageUrl != null && post.imageUrl!.isNotEmpty)
+              GestureDetector(
+                onDoubleTap: _onDoubleTap,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CachedNetworkImage(
+                      imageUrl: post.imageUrl!,
+                      width: double.infinity,
+                      height: 300,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        height: 300,
+                        color: AppTheme.surfaceColor,
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        height: 300,
+                        color: AppTheme.surfaceColor,
+                        child:
+                            const Icon(Icons.broken_image_outlined, size: 48),
+                      ),
+                    ),
+                    // Heart animation overlay
+                    AnimatedOpacity(
+                      opacity: _showHeart ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: AnimatedScale(
+                        scale: _showHeart ? 1.0 : 0.5,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.elasticOut,
+                        child: const Icon(
+                          Icons.favorite,
+                          color: Colors.white,
+                          size: 80,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black38,
+                              blurRadius: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -1123,6 +1388,7 @@ class _PostCard extends ConsumerWidget {
   }
 
   void _showOptionsSheet(BuildContext context, WidgetRef ref) {
+    final post = widget.post;
     final currentUser = ref.read(currentUserProvider);
     final isOwner = currentUser?.id == post.userId;
     showModalBottomSheet(

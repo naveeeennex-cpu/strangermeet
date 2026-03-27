@@ -7,6 +7,8 @@ class Story {
   final String? userImage;
   final String imageUrl;
   final String caption;
+  final String mediaType; // 'image' or 'video'
+  final String? videoUrl;
   final int viewsCount;
   final bool isViewed;
   final DateTime createdAt;
@@ -19,6 +21,8 @@ class Story {
     this.userImage,
     required this.imageUrl,
     this.caption = '',
+    this.mediaType = 'image',
+    this.videoUrl,
     this.viewsCount = 0,
     this.isViewed = false,
     required this.createdAt,
@@ -33,6 +37,8 @@ class Story {
       userImage: json['user_image'] ?? json['userImage'],
       imageUrl: json['image_url'] ?? json['imageUrl'] ?? '',
       caption: json['caption'] ?? '',
+      mediaType: json['media_type'] ?? json['mediaType'] ?? 'image',
+      videoUrl: json['video_url'] ?? json['videoUrl'],
       viewsCount: json['views_count'] ?? json['viewsCount'] ?? 0,
       isViewed: json['is_viewed'] ?? json['isViewed'] ?? false,
       createdAt: parseUtcToLocal(json['created_at']) ?? parseUtcToLocal(json['createdAt']) ?? DateTime.now(),
@@ -48,6 +54,8 @@ class Story {
       'user_image': userImage,
       'image_url': imageUrl,
       'caption': caption,
+      'media_type': mediaType,
+      'video_url': videoUrl,
       'views_count': viewsCount,
       'is_viewed': isViewed,
       'created_at': createdAt.toIso8601String(),

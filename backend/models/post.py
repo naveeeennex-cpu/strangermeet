@@ -7,6 +7,8 @@ class PostModel(BaseModel):
     id: Optional[str] = None
     user_id: str
     image_url: Optional[str] = None
+    media_type: str = "image"
+    video_url: Optional[str] = None
     caption: str
     likes_count: int = 0
     created_at: datetime = Field(default_factory=datetime.utcnow)

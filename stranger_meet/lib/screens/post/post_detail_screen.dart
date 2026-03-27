@@ -6,6 +6,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../config/theme.dart';
 import '../../models/post.dart';
 import '../../providers/post_provider.dart';
+import '../../widgets/video_player_widget.dart';
 
 class PostDetailScreen extends ConsumerStatefulWidget {
   final String postId;
@@ -472,8 +473,18 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                             ],
                           ),
                         ),
-                        // Image
-                        if (post.imageUrl != null)
+                        // Media: Video or Image
+                        if (post.mediaType == 'video' &&
+                            post.videoUrl != null &&
+                            post.videoUrl!.isNotEmpty)
+                          VideoPlayerWidget(
+                            videoUrl: post.videoUrl!,
+                            autoPlay: true,
+                            showControls: true,
+                            aspectRatio: 16 / 9,
+                          )
+                        else if (post.imageUrl != null &&
+                            post.imageUrl!.isNotEmpty)
                           CachedNetworkImage(
                             imageUrl: post.imageUrl!,
                             width: double.infinity,

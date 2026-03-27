@@ -4,6 +4,7 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import '../config/theme.dart';
 import '../models/post.dart';
+import 'video_player_widget.dart';
 
 class PostCard extends StatelessWidget {
   final Post post;
@@ -35,7 +36,7 @@ class PostCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(),
-            if (post.imageUrl != null) _buildImage(),
+            _buildMedia(),
             _buildActionRow(),
             _buildLikesText(),
             _buildCaption(),
@@ -131,37 +132,72 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImage() {
-    return CachedNetworkImage(
-      imageUrl: post.imageUrl!,
-      width: double.infinity,
-      fit: BoxFit.cover,
-      placeholder: (context, url) => Container(
+  Widget _buildMedia() {
+    if (post.mediaType == 'video' &&
+        post.videoUrl != null &&
+        post.videoUrl!.isNotEmpty) {
+      return Stack(
+        children: [
+          VideoPlayerWidget(
+            videoUrl: post.videoUrl!,
+            autoPlay: false,
+            showControls: true,
+            aspectRatio: 16 / 9,
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(
+                Icons.videocam,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (post.imageUrl != null && post.imageUrl!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: post.imageUrl!,
         width: double.infinity,
-        constraints: const BoxConstraints(minHeight: 250),
-        color: AppTheme.surfaceColor,
-        child: const Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppTheme.primaryColor,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 250),
+          color: AppTheme.surfaceColor,
+          child: const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.primaryColor,
+              ),
             ),
           ),
         ),
-      ),
-      errorWidget: (context, url, error) => Container(
-        width: double.infinity,
-        height: 250,
-        color: AppTheme.surfaceColor,
-        child: const Icon(
-          Icons.broken_image_outlined,
-          size: 48,
-          color: AppTheme.textSecondary,
+        errorWidget: (context, url, error) => Container(
+          width: double.infinity,
+          height: 250,
+          color: AppTheme.surfaceColor,
+          child: const Icon(
+            Icons.broken_image_outlined,
+            size: 48,
+            color: AppTheme.textSecondary,
+          ),
         ),
-      ),
-    );
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildActionRow() {

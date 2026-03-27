@@ -408,6 +408,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                                       DateSeparator(date: message.timestamp!),
                                     _GroupMessageBubble(
                                       senderName: message.userName,
+                                      senderImage: message.userImage,
                                       message: message.message,
                                       isMe: isMe,
                                       time: message.timestamp != null
@@ -655,6 +656,7 @@ class _MemberAvatar extends StatelessWidget {
 
 class _GroupMessageBubble extends StatelessWidget {
   final String senderName;
+  final String? senderImage;
   final String message;
   final bool isMe;
   final String time;
@@ -663,6 +665,7 @@ class _GroupMessageBubble extends StatelessWidget {
 
   const _GroupMessageBubble({
     required this.senderName,
+    this.senderImage,
     required this.message,
     required this.isMe,
     required this.time,
@@ -674,15 +677,51 @@ class _GroupMessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isImage = messageType == 'image' && imageUrl.isNotEmpty;
 
+    if (isMe) {
+      return _buildBubbleOnly(context, isImage);
+    }
+
+    // For other users: show avatar + bubble
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Avatar
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: AppTheme.surfaceColor,
+            backgroundImage: senderImage != null && senderImage!.isNotEmpty
+                ? CachedNetworkImageProvider(senderImage!)
+                : null,
+            child: senderImage == null || senderImage!.isEmpty
+                ? Text(
+                    senderName.isNotEmpty ? senderName[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 8),
+          // Bubble
+          Flexible(child: _buildBubbleOnly(context, isImage, addMargin: false)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBubbleOnly(BuildContext context, bool isImage, {bool addMargin = true}) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: EdgeInsets.only(bottom: addMargin ? 8 : 0),
         padding: isImage
             ? const EdgeInsets.all(4)
             : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          maxWidth: MediaQuery.of(context).size.width * (isMe ? 0.75 : 0.65),
         ),
         decoration: BoxDecoration(
           color: isMe ? AppTheme.primaryColor : AppTheme.surfaceColor,

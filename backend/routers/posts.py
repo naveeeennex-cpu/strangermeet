@@ -16,6 +16,8 @@ def _row_to_post_response(row, liked_post_ids: set = None) -> PostResponse:
         user_profile_image=row.get("user_profile_image") or None,
         image_url=row["image_url"] or None,
         caption=row["caption"],
+        media_type=row.get("media_type") or "image",
+        video_url=row.get("video_url") or None,
         likes=[],
         likes_count=row.get("likes_count", 0),
         is_liked=post_id in (liked_post_ids or set()),
@@ -36,13 +38,15 @@ async def create_post(
     try:
         row = await pool.fetchrow(
             """
-            INSERT INTO posts (user_id, image_url, caption)
-            VALUES ($1, $2, $3)
+            INSERT INTO posts (user_id, image_url, caption, media_type, video_url)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING *
             """,
             user_id,
             post_data.image_url or "",
             post_data.caption,
+            post_data.media_type or "image",
+            post_data.video_url or "",
         )
     except Exception as e:
         raise HTTPException(
@@ -57,6 +61,8 @@ async def create_post(
         user_profile_image=current_user.get("profile_image_url") or None,
         image_url=row["image_url"] or None,
         caption=row["caption"],
+        media_type=row.get("media_type") or "image",
+        video_url=row.get("video_url") or None,
         likes=[],
         likes_count=0,
         is_liked=False,
@@ -151,6 +157,8 @@ async def get_post(
         user_profile_image=row["user_profile_image"] or None,
         image_url=row["image_url"] or None,
         caption=row["caption"],
+        media_type=row.get("media_type") or "image",
+        video_url=row.get("video_url") or None,
         likes=[],
         likes_count=row["likes_count"],
         is_liked=liked is not None,
@@ -235,6 +243,8 @@ async def toggle_like(
         user_profile_image=row["user_profile_image"] or None,
         image_url=row["image_url"] or None,
         caption=row["caption"],
+        media_type=row.get("media_type") or "image",
+        video_url=row.get("video_url") or None,
         likes=[],
         likes_count=row["likes_count"],
         is_liked=is_liked,
@@ -475,6 +485,10 @@ async def update_post(
         set_parts.append(f"image_url = ${idx}")
         params.append(update_data.image_url)
         idx += 1
+    if update_data.video_url is not None:
+        set_parts.append(f"video_url = ${idx}")
+        params.append(update_data.video_url)
+        idx += 1
 
     if not set_parts:
         raise HTTPException(status_code=400, detail="Nothing to update")
@@ -490,6 +504,8 @@ async def update_post(
         user_profile_image=current_user.get("profile_image_url") or None,
         image_url=row["image_url"] or None,
         caption=row["caption"],
+        media_type=row.get("media_type") or "image",
+        video_url=row.get("video_url") or None,
         likes=[],
         likes_count=row["likes_count"],
         is_liked=False,

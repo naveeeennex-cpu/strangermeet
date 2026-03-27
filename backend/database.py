@@ -18,6 +18,12 @@
 # ALTER TABLE community_events ADD COLUMN IF NOT EXISTS end_date TIMESTAMP;
 # ALTER TABLE community_events ADD COLUMN IF NOT EXISTS max_altitude_m FLOAT DEFAULT 0;
 # ALTER TABLE community_events ADD COLUMN IF NOT EXISTS total_distance_km FLOAT DEFAULT 0;
+#
+# -- Video support for posts and stories:
+# ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type VARCHAR(10) DEFAULT 'image';
+# ALTER TABLE posts ADD COLUMN IF NOT EXISTS video_url TEXT DEFAULT '';
+# ALTER TABLE stories ADD COLUMN IF NOT EXISTS media_type VARCHAR(10) DEFAULT 'image';
+# ALTER TABLE stories ADD COLUMN IF NOT EXISTS video_url TEXT DEFAULT '';
 # =====================================================================
 
 import asyncpg
@@ -93,6 +99,8 @@ async def init_db():
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 image_url TEXT DEFAULT '',
                 caption TEXT DEFAULT '',
+                media_type VARCHAR(10) DEFAULT 'image',
+                video_url TEXT DEFAULT '',
                 likes_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT NOW()
             );
@@ -182,6 +190,8 @@ async def init_db():
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 image_url TEXT NOT NULL,
                 caption TEXT DEFAULT '',
+                media_type VARCHAR(10) DEFAULT 'image',
+                video_url TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT NOW(),
                 expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '24 hours'
             );
@@ -469,6 +479,19 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             );
         """)
+
+        # Video support migration for posts and stories
+        for col_sql in [
+            "ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type VARCHAR(10) DEFAULT 'image'",
+            "ALTER TABLE posts ADD COLUMN IF NOT EXISTS video_url TEXT DEFAULT ''",
+            "ALTER TABLE stories ADD COLUMN IF NOT EXISTS media_type VARCHAR(10) DEFAULT 'image'",
+            "ALTER TABLE stories ADD COLUMN IF NOT EXISTS video_url TEXT DEFAULT ''",
+        ]:
+            await conn.execute(f"""
+                DO $$ BEGIN {col_sql};
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$;
+            """)
 
 
 async def seed_demo_data():

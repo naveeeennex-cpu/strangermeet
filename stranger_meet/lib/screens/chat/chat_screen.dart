@@ -226,18 +226,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     _messageController.clear();
 
-    // Always use REST API for reliability, then also notify via WS
+    // Use REST API only — WebSocket is for receiving, not sending
     try {
       await ref
           .read(messagesProvider(widget.userId).notifier)
           .sendMessage(text);
       _scrollToBottom();
-
-      // Also send via WebSocket for real-time delivery to receiver
-      final ws = WebSocketService();
-      if (ws.isConnected) {
-        ws.sendMessage(widget.userId, text);
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -279,15 +273,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         return;
       }
 
-      // Send via WebSocket if connected, otherwise REST
-      final ws = WebSocketService();
-      if (ws.isConnected) {
-        ws.sendMessage(widget.userId, '', imageUrl: imageUrl, messageType: 'image');
-      } else {
-        await ref
-            .read(messagesProvider(widget.userId).notifier)
-            .sendMessage('', imageUrl: imageUrl, messageType: 'image');
-      }
+      // Use REST API only
+      await ref
+          .read(messagesProvider(widget.userId).notifier)
+          .sendMessage('', imageUrl: imageUrl, messageType: 'image');
       _scrollToBottom();
     } catch (e) {
       if (mounted) {

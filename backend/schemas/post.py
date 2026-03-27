@@ -6,6 +6,8 @@ from datetime import datetime
 class PostCreate(BaseModel):
     caption: str = Field(..., min_length=1)
     image_url: Optional[str] = None
+    media_type: str = "image"
+    video_url: Optional[str] = None
 
 
 class PostResponse(BaseModel):
@@ -15,6 +17,8 @@ class PostResponse(BaseModel):
     user_profile_image: Optional[str] = None
     image_url: Optional[str] = None
     caption: str
+    media_type: str = "image"
+    video_url: Optional[str] = None
     likes: List[str] = []
     likes_count: int = 0
     is_liked: bool = False
@@ -25,6 +29,7 @@ class PostResponse(BaseModel):
 class PostUpdate(BaseModel):
     caption: Optional[str] = None
     image_url: Optional[str] = None
+    video_url: Optional[str] = None
 
 
 class CommentCreate(BaseModel):
