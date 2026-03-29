@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, WebSocket, WebSocketDisconnect
 from typing import List
 import json
+import logging
 
 from schemas.message import MessageCreate, MessageResponse
 from services.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 
 # WebSocket connection manager
@@ -14,9 +17,27 @@ class ConnectionManager:
     async def connect(self, user_id: str, websocket: WebSocket):
         await websocket.accept()
         self.active_connections[user_id] = websocket
+        # Broadcast online status to all connected users
+        await self._broadcast_presence(user_id, online=True)
 
-    def disconnect(self, user_id: str):
+    async def disconnect(self, user_id: str):
         self.active_connections.pop(user_id, None)
+        # Broadcast offline status to all connected users
+        await self._broadcast_presence(user_id, online=False)
+
+    async def _broadcast_presence(self, user_id: str, online: bool):
+        """Notify all other connected users about this user's presence change."""
+        event = {
+            "type": "online" if online else "offline",
+            "user_id": user_id,
+        }
+        for uid, ws in list(self.active_connections.items()):
+            if uid != user_id:
+                try:
+                    await ws.send_json(event)
+                except Exception:
+                    # Connection dead, will be cleaned up on next message
+                    pass
 
     async def send_to_user(self, user_id: str, message: dict):
         ws = self.active_connections.get(user_id)
@@ -24,7 +45,7 @@ class ConnectionManager:
             try:
                 await ws.send_json(message)
             except Exception:
-                self.disconnect(user_id)
+                self.active_connections.pop(user_id, None)
 
     def is_online(self, user_id: str) -> bool:
         return user_id in self.active_connections
@@ -85,11 +106,14 @@ async def send_message(
         if not shared_community:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only message friends or community members")
 
+    # Determine initial status: 'delivered' if receiver is online, 'sent' otherwise
+    initial_status = 'delivered' if manager.is_online(message_data.receiver_id) else 'sent'
+
     try:
         row = await pool.fetchrow(
             """
-            INSERT INTO messages (sender_id, receiver_id, message, image_url, message_type)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO messages (sender_id, receiver_id, message, image_url, message_type, status)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
             """,
             sender_id,
@@ -97,6 +121,7 @@ async def send_message(
             message_data.message,
             message_data.image_url,
             message_data.message_type,
+            initial_status,
         )
     except Exception as e:
         raise HTTPException(
@@ -104,17 +129,41 @@ async def send_message(
             detail=f"Failed to send message: {str(e)}",
         )
 
-    return MessageResponse(
+    msg_status = row.get("status") or initial_status
+
+    response_data = MessageResponse(
         id=str(row["id"]),
         sender_id=str(row["sender_id"]),
         receiver_id=str(row["receiver_id"]),
         message=row["message"],
         timestamp=row["timestamp"],
         is_read=row["is_read"],
+        status=msg_status,
         sender_name=current_user["name"],
         image_url=row["image_url"] or "",
         message_type=row["message_type"] or "text",
     )
+
+    # Broadcast via WebSocket to both sender and receiver for real-time updates
+    ws_payload = {
+        "type": "message",
+        "id": response_data.id,
+        "sender_id": response_data.sender_id,
+        "receiver_id": response_data.receiver_id,
+        "message": response_data.message,
+        "timestamp": response_data.timestamp.isoformat(),
+        "is_read": response_data.is_read,
+        "status": response_data.status,
+        "sender_name": response_data.sender_name or "",
+        "image_url": response_data.image_url,
+        "message_type": response_data.message_type,
+    }
+    # Send to receiver (real-time delivery)
+    await manager.send_to_user(message_data.receiver_id, ws_payload)
+    # Send to sender (so other devices / the WS listener can confirm)
+    await manager.send_to_user(sender_id, ws_payload)
+
+    return response_data
 
 
 @router.post("/{user_id}/read")
@@ -127,7 +176,7 @@ async def mark_messages_read(
     pool = request.app.state.pool
     my_id = current_user["id"]
     await pool.execute(
-        "UPDATE messages SET is_read = TRUE WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE",
+        "UPDATE messages SET is_read = TRUE, status = 'read' WHERE sender_id = $1 AND receiver_id = $2 AND status != 'read'",
         user_id,
         my_id,
     )
@@ -180,11 +229,11 @@ async def get_conversation(
             detail="User not found",
         )
 
-    # Mark messages from other user as read
+    # Mark messages from other user as read (update both is_read and status)
     await pool.execute(
         """
-        UPDATE messages SET is_read = TRUE
-        WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE
+        UPDATE messages SET is_read = TRUE, status = 'read'
+        WHERE sender_id = $1 AND receiver_id = $2 AND status != 'read'
         """,
         user_id,
         current_id,
@@ -216,6 +265,7 @@ async def get_conversation(
             message=row["message"],
             timestamp=row["timestamp"],
             is_read=row["is_read"],
+            status=row.get("status") or ("read" if row["is_read"] else "sent"),
             sender_name=row["sender_name"],
             image_url=row.get("image_url") or "",
             message_type=row.get("message_type") or "text",
@@ -424,6 +474,25 @@ async def websocket_chat(websocket: WebSocket, token: str):
 
     await manager.connect(user_id, websocket)
 
+    # When user connects, mark pending/sent messages TO them as delivered
+    try:
+        undelivered = await pool.fetch(
+            "UPDATE messages SET status = 'delivered' WHERE receiver_id = $1 AND status = 'sent' RETURNING sender_id",
+            user_id
+        )
+        # Notify senders their messages were delivered
+        notified_senders = set()
+        for row in undelivered:
+            sender_id = str(row['sender_id'])
+            if sender_id not in notified_senders:
+                notified_senders.add(sender_id)
+                await manager.send_to_user(
+                    sender_id,
+                    {"type": "delivered", "user_id": user_id}
+                )
+    except Exception as e:
+        logger.warning(f"Failed to mark messages as delivered on connect: {e}")
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -452,16 +521,22 @@ async def websocket_chat(websocket: WebSocket, token: str):
                     )
                     continue
 
+                # Determine initial status
+                initial_status = 'delivered' if manager.is_online(receiver_id) else 'sent'
+
                 # Save to DB
                 row = await pool.fetchrow(
-                    """INSERT INTO messages (sender_id, receiver_id, message, image_url, message_type)
-                       VALUES ($1, $2, $3, $4, $5) RETURNING *""",
+                    """INSERT INTO messages (sender_id, receiver_id, message, image_url, message_type, status)
+                       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
                     user_id,
                     receiver_id,
                     message_text,
                     image_url,
                     ws_message_type,
+                    initial_status,
                 )
+
+                msg_status = row.get("status") or initial_status
 
                 msg_response = {
                     "type": "message",
@@ -471,6 +546,7 @@ async def websocket_chat(websocket: WebSocket, token: str):
                     "message": row["message"],
                     "timestamp": row["timestamp"].isoformat(),
                     "is_read": False,
+                    "status": msg_status,
                     "sender_name": user["name"],
                     "sender_image": user.get("profile_image_url") or "",
                     "image_url": row["image_url"] or "",
@@ -486,17 +562,27 @@ async def websocket_chat(websocket: WebSocket, token: str):
                 # Mark messages as read
                 sender_id = data.get("sender_id")
                 if sender_id:
-                    await pool.execute(
-                        "UPDATE messages SET is_read = TRUE WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE",
+                    # Get IDs of messages being marked as read (for client-side update)
+                    unread_rows = await pool.fetch(
+                        "SELECT id FROM messages WHERE sender_id = $1 AND receiver_id = $2 AND status != 'read'",
                         sender_id,
                         user_id,
                     )
-                    # Notify the sender that messages were read
+                    read_message_ids = [str(r["id"]) for r in unread_rows]
+
+                    # Update both is_read and status
+                    await pool.execute(
+                        "UPDATE messages SET is_read = TRUE, status = 'read' WHERE sender_id = $1 AND receiver_id = $2 AND status != 'read'",
+                        sender_id,
+                        user_id,
+                    )
+                    # Notify the sender that their messages were read
                     await manager.send_to_user(
                         sender_id,
                         {
                             "type": "read_receipt",
                             "reader_id": user_id,
+                            "message_ids": read_message_ids,
                         },
                     )
 
@@ -513,6 +599,6 @@ async def websocket_chat(websocket: WebSocket, token: str):
                     )
 
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        await manager.disconnect(user_id)
     except Exception:
-        manager.disconnect(user_id)
+        await manager.disconnect(user_id)

@@ -17,6 +17,7 @@ class MessageResponse(BaseModel):
     message: str
     timestamp: datetime
     is_read: bool = False
+    status: str = "sent"  # 'sent', 'delivered', 'read'
     sender_name: Optional[str] = None
     image_url: str = ""
     message_type: str = "text"

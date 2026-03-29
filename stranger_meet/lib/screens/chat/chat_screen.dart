@@ -49,6 +49,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _isTyping = false;
   bool _isUploading = false;
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
+  StreamSubscription<void>? _reconnectSubscription;
 
   @override
   void initState() {
@@ -67,54 +68,73 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Mark messages as read when opening the chat
     ws.markAsRead(widget.userId);
 
+    // Listen for WebSocket reconnection — re-fetch messages to catch anything missed
+    _reconnectSubscription = ws.onReconnected.listen((_) {
+      if (mounted) {
+        ref.read(messagesProvider(widget.userId).notifier).fetchMessages();
+        _fetchOnlineStatus();
+      }
+    });
+
     _wsSubscription = ws.messageStream.listen((data) {
       final type = data['type'];
+
       if (type == 'message') {
-        final senderId = data['sender_id'];
-        final receiverId = data['receiver_id'];
+        final senderId = data['sender_id']?.toString();
+        final receiverId = data['receiver_id']?.toString();
         // Check if this message belongs to this conversation
-        if (senderId == widget.userId || receiverId == widget.userId) {
+        // (either from the other user, or sent by us to the other user)
+        final belongsToConversation = senderId == widget.userId ||
+            receiverId == widget.userId;
+        if (belongsToConversation) {
           final newMsg = Message.fromJson(data);
-          final state = ref.read(messagesProvider(widget.userId));
-          final existing = state.messages.any((m) => m.id == newMsg.id);
-          if (!existing) {
-            ref
-                .read(messagesProvider(widget.userId).notifier)
-                .addMessage(newMsg);
-            if (mounted) setState(() {});
-            Future.delayed(const Duration(milliseconds: 100), () {
-              _scrollToBottom();
-            });
-            // Mark as read since we're viewing this conversation
-            if (senderId == widget.userId) {
-              WebSocketService().markAsRead(widget.userId);
-            }
+          // Dedup: the provider's addMessage checks by ID
+          ref
+              .read(messagesProvider(widget.userId).notifier)
+              .addMessage(newMsg);
+          if (mounted) setState(() {});
+          Future.delayed(const Duration(milliseconds: 100), () {
+            _scrollToBottom();
+          });
+          // If the message is FROM the other user, mark as read
+          // since we're actively viewing this conversation
+          if (senderId == widget.userId) {
+            WebSocketService().markAsRead(widget.userId);
           }
         }
       } else if (type == 'typing' && data['sender_id'] == widget.userId) {
-        setState(() => _isTyping = true);
+        if (mounted) setState(() => _isTyping = true);
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) setState(() => _isTyping = false);
         });
       } else if (type == 'read_receipt') {
-        // Update all sent messages to show as read
-        final currentMessages = ref.read(messagesProvider(widget.userId)).messages;
-        final updated = currentMessages.map((m) {
-          if (m.senderId == _currentUserId && !m.isRead) {
-            return Message(
-              id: m.id,
-              senderId: m.senderId,
-              receiverId: m.receiverId,
-              message: m.message,
-              timestamp: m.timestamp,
-              isRead: true,
-              imageUrl: m.imageUrl,
-              messageType: m.messageType,
-            );
-          }
-          return m;
-        }).toList();
-        ref.read(messagesProvider(widget.userId).notifier).setMessages(updated);
+        // The other user (widget.userId) read our messages
+        final readerId = data['reader_id']?.toString();
+        if (readerId == widget.userId && _currentUserId != null) {
+          ref
+              .read(messagesProvider(widget.userId).notifier)
+              .markSentMessagesAsRead(_currentUserId!);
+          if (mounted) setState(() {});
+        }
+      } else if (type == 'delivered') {
+        // Other user came online, our sent messages are now delivered
+        final deliveredUserId = data['user_id']?.toString();
+        if (deliveredUserId == widget.userId && _currentUserId != null) {
+          ref
+              .read(messagesProvider(widget.userId).notifier)
+              .markSentMessagesAsDelivered(_currentUserId!);
+          if (mounted) setState(() {});
+        }
+      } else if (type == 'online') {
+        // A user came online — check if it's the conversation partner
+        if (data['user_id']?.toString() == widget.userId) {
+          if (mounted) setState(() => _isOnline = true);
+        }
+      } else if (type == 'offline') {
+        // A user went offline — check if it's the conversation partner
+        if (data['user_id']?.toString() == widget.userId) {
+          if (mounted) setState(() => _isOnline = false);
+        }
       }
     });
   }
@@ -141,6 +161,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void dispose() {
     _wsSubscription?.cancel();
+    _reconnectSubscription?.cancel();
     // Refresh unread count when leaving chat (messages got marked as read)
     ref.read(unreadCountProvider.notifier).fetchUnreadCount();
     _messageController.dispose();
@@ -224,7 +245,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: _MessageBubble(
                 message: message.message,
                 isMe: isMe,
-                isRead: message.isRead,
+                status: message.status,
                 time: DateFormat('hh:mm a').format(message.timestamp),
                 imageUrl: message.imageUrl,
                 messageType: message.messageType,
@@ -390,7 +411,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       receiverId: m.receiverId,
                       message: editedText,
                       timestamp: m.timestamp,
-                      isRead: m.isRead,
+                      status: m.status,
                       imageUrl: m.imageUrl,
                       messageType: m.messageType,
                     );
@@ -676,12 +697,29 @@ class _UnreadMessagesBanner extends StatelessWidget {
   }
 }
 
+// ── Tick status widget ───────────────────────────────────────────────────────
+
+Widget _buildTicks(String status) {
+  switch (status) {
+    case 'pending':
+      return Icon(Icons.access_time, size: 14, color: Colors.grey[500]);
+    case 'sent':
+      return Icon(Icons.check, size: 14, color: Colors.grey[500]);
+    case 'delivered':
+      return Icon(Icons.done_all, size: 14, color: Colors.grey[500]);
+    case 'read':
+      return const Icon(Icons.done_all, size: 14, color: Colors.blue);
+    default:
+      return Icon(Icons.check, size: 14, color: Colors.grey[500]);
+  }
+}
+
 // ── Message bubble (dark theme + shared post support) ────────────────────────
 
 class _MessageBubble extends StatefulWidget {
   final String message;
   final bool isMe;
-  final bool isRead;
+  final String status;
   final String time;
   final String imageUrl;
   final String messageType;
@@ -689,7 +727,7 @@ class _MessageBubble extends StatefulWidget {
   const _MessageBubble({
     required this.message,
     required this.isMe,
-    this.isRead = false,
+    this.status = 'sent',
     required this.time,
     this.imageUrl = '',
     this.messageType = 'text',
@@ -730,7 +768,7 @@ class _MessageBubbleState extends State<_MessageBubble>
   @override
   Widget build(BuildContext context) {
     final isMe = widget.isMe;
-    final isRead = widget.isRead;
+    final status = widget.status;
     final message = widget.message;
     final time = widget.time;
     final imageUrl = widget.imageUrl;
@@ -753,15 +791,15 @@ class _MessageBubbleState extends State<_MessageBubble>
         );
       },
       child: isSharedPost
-          ? _buildSharedPostCard(context, isMe, isRead, message, time, imageUrl)
-          : _buildRegularBubble(context, isMe, isRead, message, time, imageUrl, isImage),
+          ? _buildSharedPostCard(context, isMe, status, message, time, imageUrl)
+          : _buildRegularBubble(context, isMe, status, message, time, imageUrl, isImage),
     );
   }
 
   Widget _buildSharedPostCard(
     BuildContext context,
     bool isMe,
-    bool isRead,
+    String status,
     String message,
     String time,
     String imageUrl,
@@ -837,7 +875,7 @@ class _MessageBubbleState extends State<_MessageBubble>
                   ],
                 ),
               ),
-              // Time + read status
+              // Time + tick status
               Padding(
                 padding: const EdgeInsets.only(right: 12, bottom: 8),
                 child: Row(
@@ -849,11 +887,7 @@ class _MessageBubbleState extends State<_MessageBubble>
                     ),
                     if (isMe) ...[
                       const SizedBox(width: 4),
-                      Icon(
-                        isRead ? Icons.done_all : Icons.done,
-                        size: 14,
-                        color: isRead ? Colors.blue : Colors.grey[600],
-                      ),
+                      _buildTicks(status),
                     ],
                   ],
                 ),
@@ -868,7 +902,7 @@ class _MessageBubbleState extends State<_MessageBubble>
   Widget _buildRegularBubble(
     BuildContext context,
     bool isMe,
-    bool isRead,
+    String status,
     String message,
     String time,
     String imageUrl,
@@ -951,11 +985,7 @@ class _MessageBubbleState extends State<_MessageBubble>
                   ),
                   if (isMe) ...[
                     const SizedBox(width: 4),
-                    Icon(
-                      isRead ? Icons.done_all : Icons.done,
-                      size: 14,
-                      color: isRead ? Colors.blue : Colors.grey[600],
-                    ),
+                    _buildTicks(status),
                   ],
                 ],
               ),

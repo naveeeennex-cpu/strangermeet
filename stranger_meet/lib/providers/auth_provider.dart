@@ -83,6 +83,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String occupation = '',
     String collegeName = '',
     String companyName = '',
+    String designation = '',
   }) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
@@ -97,6 +98,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         occupation: occupation,
         collegeName: collegeName,
         companyName: companyName,
+        designation: designation,
       );
       state = AuthState(
         status: AuthStatus.authenticated,

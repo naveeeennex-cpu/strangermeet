@@ -17,6 +17,7 @@ import '../../services/api_service.dart';
 import '../../widgets/video_player_widget.dart';
 import '../../widgets/auto_play_video_widget.dart';
 import '../../widgets/share_bottom_sheet.dart';
+import 'story_camera_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -315,32 +316,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ref.read(storiesProvider.notifier).fetchStories(),
           ]);
         },
-        child: CustomScrollView(
-          controller: _scrollController,
-          slivers: [
-            // "For you" | "Discover" toggle
-            SliverToBoxAdapter(child: _buildForYouDiscoverToggle()),
+        child: GestureDetector(
+          onHorizontalDragEnd: (details) {
+            // Left swipe (negative velocity = swipe left)
+            if (details.primaryVelocity != null &&
+                details.primaryVelocity! < -300) {
+              Navigator.of(context).push(
+                PageRouteBuilder(
+                  pageBuilder: (_, __, ___) => const StoryCameraScreen(),
+                  transitionsBuilder: (_, animation, __, child) {
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(1.0, 0.0),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOut,
+                      )),
+                      child: child,
+                    );
+                  },
+                ),
+              );
+            }
+          },
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              // "For you" | "Discover" toggle
+              SliverToBoxAdapter(child: _buildForYouDiscoverToggle()),
 
-            // Stories Row
-            SliverToBoxAdapter(
-              child: _StoriesRow(
-                storiesState: storiesState,
-                onAddStory: _createStoryWithUpload,
+              // Stories Row
+              SliverToBoxAdapter(
+                child: _StoriesRow(
+                  storiesState: storiesState,
+                  onAddStory: _createStoryWithUpload,
+                ),
               ),
-            ),
 
-            // "Posts" | "Reels" sub-tabs
-            SliverToBoxAdapter(child: _buildPostsReelsTabs()),
+              // "Posts" | "Reels" sub-tabs
+              SliverToBoxAdapter(child: _buildPostsReelsTabs()),
 
-            // Content area
-            if (_selectedSubTab == 0) ...[
-              // Posts feed
-              _buildPostsFeed(postsState),
-            ] else ...[
-              // Reels grid
-              SliverToBoxAdapter(child: _buildReelsGrid()),
+              // Content area
+              if (_selectedSubTab == 0) ...[
+                // Posts feed
+                _buildPostsFeed(postsState),
+              ] else ...[
+                // Reels grid
+                SliverToBoxAdapter(child: _buildReelsGrid()),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -789,15 +815,29 @@ class _StoriesRowState extends ConsumerState<_StoriesRow> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         children: [
-          // Your Story
-          _StoryCircle(
-            imageUrl: currentUser?.profileImageUrl,
-            label: 'Your Story',
-            isAddStory: true,
-            onTap: widget.onAddStory,
-          ),
-          // Friend stories
-          ...widget.storiesState.userStories.map((userStory) {
+          // Your Story — check if current user has an active story
+          if (currentUser != null &&
+              widget.storiesState.userStories
+                  .any((s) => s.userId == currentUser.id))
+            _StoryCircle(
+              imageUrl: currentUser.profileImageUrl,
+              label: 'Your Story',
+              hasUnviewed: false, // Own story always "viewed"
+              hasOwnStory: true,
+              onTap: () => context.push('/story/${currentUser.id}'),
+              onLongPress: widget.onAddStory,
+            )
+          else
+            _StoryCircle(
+              imageUrl: currentUser?.profileImageUrl,
+              label: 'Your Story',
+              isAddStory: true,
+              onTap: widget.onAddStory,
+            ),
+          // Friend stories (exclude current user's stories since shown above)
+          ...widget.storiesState.userStories
+              .where((userStory) => userStory.userId != currentUser?.id)
+              .map((userStory) {
             return _StoryCircle(
               imageUrl: userStory.userImage,
               label: userStory.userName,
@@ -840,7 +880,9 @@ class _StoryCircle extends StatelessWidget {
   final bool isAddStory;
   final bool hasUnviewed;
   final bool isCommunity;
+  final bool hasOwnStory;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const _StoryCircle({
     this.imageUrl,
@@ -848,13 +890,16 @@ class _StoryCircle extends StatelessWidget {
     this.isAddStory = false,
     this.hasUnviewed = false,
     this.isCommunity = false,
+    this.hasOwnStory = false,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         width: 72,
         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -868,19 +913,28 @@ class _StoryCircle extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: isAddStory
                     ? null
-                    : hasUnviewed
+                    : hasOwnStory
                         ? const LinearGradient(
                             colors: [
-                              AppTheme.primaryColor,
-                              Color(0xFF8BC34A),
+                              Color(0xFF9E9E9E),
+                              Color(0xFF616161),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           )
-                        : null,
+                        : hasUnviewed
+                            ? const LinearGradient(
+                                colors: [
+                                  AppTheme.primaryColor,
+                                  Color(0xFF8BC34A),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                            : null,
                 border: isAddStory
                     ? null
-                    : !hasUnviewed
+                    : (!hasUnviewed && !hasOwnStory)
                         ? Border.all(color: Theme.of(context).dividerColor, width: 2)
                         : null,
               ),
@@ -933,6 +987,31 @@ class _StoryCircle extends StatelessWidget {
                           Icons.add,
                           size: 14,
                           color: Colors.black,
+                        ),
+                      ),
+                    ),
+                  // Own story "+" badge at bottom-left
+                  if (hasOwnStory)
+                    Positioned(
+                      left: 0,
+                      bottom: 0,
+                      child: GestureDetector(
+                        onTap: onLongPress, // tapping "+" adds more stories
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: Theme.of(context).scaffoldBackgroundColor,
+                                width: 2),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            size: 12,
+                            color: Colors.black,
+                          ),
                         ),
                       ),
                     ),

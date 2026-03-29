@@ -6,7 +6,7 @@ class Message {
   final String receiverId;
   final String message;
   final DateTime timestamp;
-  final bool isRead;
+  final String status; // 'pending', 'sent', 'delivered', 'read'
   final String imageUrl;
   final String messageType;
 
@@ -16,12 +16,21 @@ class Message {
     required this.receiverId,
     required this.message,
     required this.timestamp,
-    this.isRead = false,
+    this.status = 'sent',
     this.imageUrl = '',
     this.messageType = 'text',
   });
 
+  bool get isRead => status == 'read';
+  bool get isDelivered => status == 'delivered' || status == 'read';
+  bool get isSent => status != 'pending';
+
   factory Message.fromJson(Map<String, dynamic> json) {
+    // Backward compat: convert old is_read boolean to status
+    String status = json['status'] ?? 'sent';
+    if (status == 'sent' && (json['is_read'] == true || json['isRead'] == true)) {
+      status = 'read';
+    }
     return Message(
       id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
       senderId:
@@ -31,9 +40,22 @@ class Message {
           '',
       message: json['message'] ?? json['content'] ?? '',
       timestamp: parseUtcToLocal(json['timestamp']) ?? parseUtcToLocal(json['created_at']) ?? DateTime.now(),
-      isRead: json['is_read'] ?? json['isRead'] ?? false,
+      status: status,
       imageUrl: json['image_url'] ?? json['imageUrl'] ?? '',
       messageType: json['message_type'] ?? json['messageType'] ?? 'text',
+    );
+  }
+
+  Message copyWith({String? status}) {
+    return Message(
+      id: id,
+      senderId: senderId,
+      receiverId: receiverId,
+      message: message,
+      timestamp: timestamp,
+      status: status ?? this.status,
+      imageUrl: imageUrl,
+      messageType: messageType,
     );
   }
 
@@ -45,6 +67,7 @@ class Message {
       'message': message,
       'timestamp': timestamp.toIso8601String(),
       'is_read': isRead,
+      'status': status,
       'image_url': imageUrl,
       'message_type': messageType,
     };

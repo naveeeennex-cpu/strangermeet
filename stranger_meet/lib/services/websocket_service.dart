@@ -12,9 +12,16 @@ class WebSocketService {
   WebSocketChannel? _channel;
   bool _isConnected = false;
   Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectDelay = 30; // seconds
 
   final _messageController = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get messageStream => _messageController.stream;
+
+  /// Emits when the WebSocket reconnects after a disconnect.
+  /// Listeners should use this to re-fetch missed messages.
+  final _reconnectedController = StreamController<void>.broadcast();
+  Stream<void> get onReconnected => _reconnectedController.stream;
 
   bool get isConnected => _isConnected;
 
@@ -34,6 +41,12 @@ class WebSocketService {
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
       _isConnected = true;
       _reconnectTimer?.cancel();
+
+      // If this is a reconnection (not the first connect), notify listeners
+      if (_reconnectAttempts > 0) {
+        _reconnectedController.add(null);
+      }
+      _reconnectAttempts = 0;
 
       _channel!.stream.listen(
         (data) {
@@ -59,10 +72,14 @@ class WebSocketService {
 
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), connect);
+    _reconnectAttempts++;
+    // Exponential backoff: 3s, 6s, 12s, ... up to maxReconnectDelay
+    final delay = (_reconnectAttempts * 3).clamp(3, _maxReconnectDelay);
+    _reconnectTimer = Timer(Duration(seconds: delay), connect);
   }
 
-  void sendMessage(String receiverId, String message, {String imageUrl = '', String messageType = 'text'}) {
+  void sendMessage(String receiverId, String message,
+      {String imageUrl = '', String messageType = 'text'}) {
     if (!_isConnected || _channel == null) return;
     _channel!.sink.add(jsonEncode({
       'type': 'message',
@@ -93,5 +110,6 @@ class WebSocketService {
     _reconnectTimer?.cancel();
     _channel?.sink.close();
     _isConnected = false;
+    _reconnectAttempts = 0;
   }
 }

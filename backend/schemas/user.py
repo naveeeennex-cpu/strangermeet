@@ -14,6 +14,7 @@ class UserSignup(BaseModel):
     occupation: str = ""  # "student" or "working" or ""
     college_name: str = ""
     company_name: str = ""
+    designation: str = ""  # job role/title
 
 
 class UserLogin(BaseModel):
@@ -35,6 +36,7 @@ class UserResponse(BaseModel):
     occupation: Optional[str] = ""
     college_name: Optional[str] = ""
     company_name: Optional[str] = ""
+    designation: Optional[str] = ""
     created_at: datetime
 
 

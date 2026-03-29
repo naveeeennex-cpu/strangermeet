@@ -41,8 +41,31 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   // Step 2 - About You
   String _occupation = ''; // "student" or "working" or ""
+  String _designation = '';
+  final _customDesignationController = TextEditingController();
   final _collegeController = TextEditingController();
   final _companyController = TextEditingController();
+
+  static const _designations = [
+    'Software Developer',
+    'Designer',
+    'Entrepreneur',
+    'HR',
+    'Journalist',
+    'Marketing',
+    'Finance',
+    'Content Creator',
+    'Freelancer',
+    'Teacher / Professor',
+    'Doctor / Healthcare',
+    'Lawyer',
+    'Engineer',
+    'Sales',
+    'Consultant',
+    'Data Analyst',
+    'Product Manager',
+    'Other',
+  ];
 
   // Step 3 - Interests
   final List<String> _allInterests = [
@@ -207,6 +230,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           occupation: _occupation,
           collegeName: _collegeController.text.trim(),
           companyName: _companyController.text.trim(),
+          designation: _designation == 'Other'
+              ? _customDesignationController.text.trim()
+              : _designation,
         );
 
     if (!mounted) return;
@@ -585,6 +611,63 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 prefixIcon: Icon(Icons.business_outlined),
               ),
             ),
+            const SizedBox(height: 16),
+            // Role / Designation dropdown
+            const Text(
+              'Your Role',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _designations.map((role) {
+                final isSelected = _designation == role;
+                return GestureDetector(
+                  onTap: () => setState(() => _designation = role),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.primaryColor.withOpacity(0.2)
+                          : Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primaryColor
+                            : Theme.of(context).dividerColor,
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Text(
+                      role,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        color: isSelected
+                            ? AppTheme.primaryColor
+                            : Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (_designation == 'Other') ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _customDesignationController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  hintText: 'Enter your role',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
           ],
           const SizedBox(height: 16),

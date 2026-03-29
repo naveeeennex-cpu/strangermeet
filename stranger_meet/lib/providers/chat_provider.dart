@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/message.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 
 // Conversations provider
 
@@ -117,8 +118,10 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
   }
 
   void addMessage(Message message) {
-    // Avoid duplicates
-    if (state.messages.any((m) => m.id == message.id)) return;
+    // Avoid duplicates by checking ID
+    if (message.id.isNotEmpty && state.messages.any((m) => m.id == message.id)) {
+      return;
+    }
     state = state.copyWith(messages: [...state.messages, message]);
   }
 
@@ -126,8 +129,59 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     state = state.copyWith(messages: messages);
   }
 
+  /// Mark all messages from this conversation partner as read in local state.
+  void markMessagesAsRead(String senderId) {
+    final updated = state.messages.map((m) {
+      if (m.senderId == senderId && !m.isRead) {
+        return m.copyWith(status: 'read');
+      }
+      return m;
+    }).toList();
+    state = state.copyWith(messages: updated);
+  }
+
+  /// Mark all sent messages (from current user) as read in local state.
+  /// Called when we receive a read_receipt from the other user.
+  void markSentMessagesAsRead(String currentUserId) {
+    final updated = state.messages.map((m) {
+      if (m.senderId == currentUserId && m.status != 'read') {
+        return m.copyWith(status: 'read');
+      }
+      return m;
+    }).toList();
+    state = state.copyWith(messages: updated);
+  }
+
+  /// Mark all sent messages (from current user) as delivered in local state.
+  /// Called when the other user comes online (delivered event).
+  void markSentMessagesAsDelivered(String currentUserId) {
+    final updated = state.messages.map((m) {
+      if (m.senderId == currentUserId && m.status == 'sent') {
+        return m.copyWith(status: 'delivered');
+      }
+      return m;
+    }).toList();
+    state = state.copyWith(messages: updated);
+  }
+
   Future<void> sendMessage(String text, {String imageUrl = '', String messageType = 'text'}) async {
+    // 1. Create pending message locally
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+    final currentUserId = await StorageService().getUserId() ?? '';
+    final pendingMsg = Message(
+      id: tempId,
+      senderId: currentUserId,
+      receiverId: userId,
+      message: text,
+      timestamp: DateTime.now(),
+      status: 'pending',
+      imageUrl: imageUrl,
+      messageType: messageType,
+    );
+    state = state.copyWith(messages: [...state.messages, pendingMsg]);
+
     try {
+      // 2. Send via REST
       final response = await _api.post('/messages', data: {
         'receiver_id': userId,
         'message': text,
@@ -135,11 +189,12 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         'message_type': messageType,
       });
 
-      final newMessage = Message.fromJson(response.data);
-      state = state.copyWith(
-        messages: [...state.messages, newMessage],
-      );
+      // 3. Replace pending with real message
+      final realMsg = Message.fromJson(response.data);
+      final updated = state.messages.map((m) => m.id == tempId ? realMsg : m).toList();
+      state = state.copyWith(messages: updated);
     } catch (e) {
+      // Mark pending message as failed but keep it visible
       state = state.copyWith(errorMessage: e.toString());
       rethrow;
     }

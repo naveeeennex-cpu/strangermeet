@@ -2,8 +2,10 @@
 # MIGRATION SQL (run manually if tables already exist):
 #
 # ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+# ALTER TABLE messages ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'sent';
+# UPDATE messages SET status = 'read' WHERE is_read = TRUE AND (status IS NULL OR status = 'sent');
 #
-# NOTE: community_messages and sub_group_messages do NOT need is_read
+# NOTE: community_messages and sub_group_messages do NOT need is_read/status
 # because read receipts are only supported for DMs (1-to-1 chats).
 # The messages table was created with is_read already, so this ALTER
 # is only needed if you created the table before is_read was added.
@@ -436,6 +438,18 @@ async def init_db():
                 ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) DEFAULT 'text';
             EXCEPTION WHEN duplicate_column THEN NULL;
             END $$;
+        """)
+
+        # Add status column to messages table for tick system (pending/sent/delivered/read)
+        await conn.execute("""
+            DO $$ BEGIN
+                ALTER TABLE messages ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'sent';
+            EXCEPTION WHEN duplicate_column THEN NULL;
+            END $$;
+        """)
+        # Backfill: set status='read' for existing messages that have is_read=TRUE
+        await conn.execute("""
+            UPDATE messages SET status = 'read' WHERE is_read = TRUE AND (status IS NULL OR status = 'sent');
         """)
 
         # Add image_url and message_type columns to community_messages table

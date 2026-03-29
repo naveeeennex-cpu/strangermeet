@@ -34,6 +34,7 @@ class AuthService {
     String occupation = '',
     String collegeName = '',
     String companyName = '',
+    String designation = '',
   }) async {
     final response = await _api.post('/auth/signup', data: {
       'name': name,
@@ -46,6 +47,7 @@ class AuthService {
       'occupation': occupation,
       'college_name': collegeName,
       'company_name': companyName,
+      'designation': designation,
     });
 
     final token = response.data['access_token'] as String;
