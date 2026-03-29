@@ -40,20 +40,37 @@ class _MyCommunitiesScreenState
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.grid_view_outlined,
-                          size: 64, color: Colors.grey[300]),
-                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.grid_view_outlined,
+                            size: 48, color: Colors.grey[400]),
+                      ),
+                      const SizedBox(height: 20),
                       Text(
                         'No communities yet',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Create your first community to get started',
+                        style: TextStyle(
+                          fontSize: 14,
                           color: Colors.grey[500],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
                         onPressed: () => context.push('/create-community'),
-                        child: const Text('Create Community'),
+                        icon: const Icon(Icons.add, size: 20),
+                        label: const Text('Create Community'),
                       ),
                     ],
                   ),
@@ -67,96 +84,218 @@ class _MyCommunitiesScreenState
                     itemCount: state.communities.length,
                     itemBuilder: (context, index) {
                       final community = state.communities[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: SizedBox(
-                              width: 52,
-                              height: 52,
-                              child: community.imageUrl != null &&
-                                      community.imageUrl!.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      imageUrl: community.imageUrl!,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Container(
-                                      color: AppTheme.primaryColor
-                                          .withOpacity(0.2),
-                                      child: Center(
-                                        child: Text(
-                                          community.name.isNotEmpty
-                                              ? community.name[0]
-                                                  .toUpperCase()
-                                              : '?',
-                                          style: const TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w700,
+                      return GestureDetector(
+                        onTap: () => context.push(
+                            '/partner/community/${community.id}/manage'),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Community Image
+                              SizedBox(
+                                height: 140,
+                                width: double.infinity,
+                                child: community.imageUrl != null &&
+                                        community.imageUrl!.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: community.imageUrl!,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              AppTheme.primaryColor
+                                                  .withOpacity(0.3),
+                                              AppTheme.primaryColor
+                                                  .withOpacity(0.1),
+                                            ],
+                                          ),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            community.name.isNotEmpty
+                                                ? community.name[0]
+                                                    .toUpperCase()
+                                                : '?',
+                                            style: const TextStyle(
+                                              fontSize: 48,
+                                              fontWeight: FontWeight.w800,
+                                              color: Colors.white54,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                            ),
-                          ),
-                          title: Text(
-                            community.name,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          subtitle: Text(
-                            '${community.membersCount} members',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined,
-                                    size: 20),
-                                onPressed: () => context.push(
-                                    '/partner/community/${community.id}/manage'),
                               ),
-                              IconButton(
-                                icon: Icon(Icons.delete_outline,
-                                    size: 20, color: AppTheme.errorColor),
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title:
-                                          const Text('Delete Community'),
-                                      content: Text(
-                                          'Are you sure you want to delete "${community.name}"?'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(ctx),
-                                          child: const Text('Cancel'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () {
-                                            Navigator.pop(ctx);
-                                            ref
-                                                .read(
-                                                    adminCommunitiesProvider
-                                                        .notifier)
-                                                .deleteCommunity(
-                                                    community.id);
-                                          },
-                                          style: TextButton.styleFrom(
-                                            foregroundColor:
-                                                AppTheme.errorColor,
+                              // Info section
+                              Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            community.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 18,
+                                            ),
                                           ),
-                                          child: const Text('Delete'),
+                                        ),
+                                        if (community.isPrivate)
+                                          Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  Colors.grey[100],
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize:
+                                                  MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.lock,
+                                                    size: 12,
+                                                    color: Colors
+                                                        .grey[600]),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Private',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                    color:
+                                                        Colors.grey[600],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    // Stats row
+                                    Row(
+                                      children: [
+                                        _MiniStat(
+                                          icon: Icons.people_outline,
+                                          value:
+                                              '${community.membersCount}',
+                                          label: 'Members',
+                                        ),
+                                        const SizedBox(width: 20),
+                                        _MiniStat(
+                                          icon: Icons.category_outlined,
+                                          value: community.category,
+                                          label: 'Category',
                                         ),
                                       ],
                                     ),
-                                  );
-                                },
+                                    const SizedBox(height: 12),
+                                    // Action buttons
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () => context.push(
+                                                '/partner/community/${community.id}/manage'),
+                                            icon: const Icon(
+                                                Icons.settings_outlined,
+                                                size: 18),
+                                            label:
+                                                const Text('Manage'),
+                                            style:
+                                                OutlinedButton.styleFrom(
+                                              padding: const EdgeInsets
+                                                  .symmetric(
+                                                  vertical: 10),
+                                              textStyle:
+                                                  const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight:
+                                                    FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        SizedBox(
+                                          width: 44,
+                                          height: 44,
+                                          child: OutlinedButton(
+                                            onPressed: () {
+                                              showDialog(
+                                                context: context,
+                                                builder: (ctx) =>
+                                                    AlertDialog(
+                                                  title: const Text(
+                                                      'Delete Community'),
+                                                  content: Text(
+                                                      'Are you sure you want to delete "${community.name}"?'),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(
+                                                              ctx),
+                                                      child: const Text(
+                                                          'Cancel'),
+                                                    ),
+                                                    TextButton(
+                                                      onPressed: () {
+                                                        Navigator.pop(
+                                                            ctx);
+                                                        ref
+                                                            .read(adminCommunitiesProvider
+                                                                .notifier)
+                                                            .deleteCommunity(
+                                                                community
+                                                                    .id);
+                                                      },
+                                                      style: TextButton
+                                                          .styleFrom(
+                                                        foregroundColor:
+                                                            AppTheme
+                                                                .errorColor,
+                                                      ),
+                                                      child: const Text(
+                                                          'Delete'),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                            style:
+                                                OutlinedButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              side: BorderSide(
+                                                  color: Colors
+                                                      .red.shade200),
+                                            ),
+                                            child: Icon(
+                                                Icons.delete_outline,
+                                                size: 18,
+                                                color: AppTheme
+                                                    .errorColor),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -170,6 +309,43 @@ class _MyCommunitiesScreenState
         backgroundColor: AppTheme.primaryColor,
         child: const Icon(Icons.add, color: Colors.black),
       ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+
+  const _MiniStat({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey[500]),
+        const SizedBox(width: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[500],
+          ),
+        ),
+      ],
     );
   }
 }

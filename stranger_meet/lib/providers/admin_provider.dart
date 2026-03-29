@@ -246,6 +246,37 @@ class AdminCommunitiesNotifier extends StateNotifier<AdminCommunitiesState> {
     await _api.delete('/partner/communities/$communityId/groups/$groupId');
   }
 
+  Future<Map<String, dynamic>> toggleGroupPrivate(String communityId, String groupId) async {
+    final response = await _api.put(
+      '/partner/communities/$communityId/groups/$groupId/toggle-private',
+    );
+    return Map<String, dynamic>.from(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPendingRequests(
+      String communityId, String groupId) async {
+    final response = await _api.get(
+      '/partner/communities/$communityId/groups/$groupId/pending-requests',
+    );
+    final data = response.data;
+    final List<dynamic> results = data is List ? data : [];
+    return results.cast<Map<String, dynamic>>();
+  }
+
+  Future<void> approveJoinRequest(
+      String communityId, String groupId, String userId) async {
+    await _api.post(
+      '/partner/communities/$communityId/groups/$groupId/approve-request/$userId',
+    );
+  }
+
+  Future<void> rejectJoinRequest(
+      String communityId, String groupId, String userId) async {
+    await _api.post(
+      '/partner/communities/$communityId/groups/$groupId/reject-request/$userId',
+    );
+  }
+
   // --- Itinerary ---
 
   Future<List<Map<String, dynamic>>> fetchItinerary(

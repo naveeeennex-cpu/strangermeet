@@ -100,8 +100,10 @@ class SubGroup {
   final String name;
   final String description;
   final String type; // 'gym', 'trip', 'meetup', 'online_meet', 'general'
+  final bool isPrivate;
   final int membersCount;
   final bool isMember;
+  final String? memberStatus; // 'active', 'pending', null
   final DateTime? createdAt;
 
   SubGroup({
@@ -110,10 +112,14 @@ class SubGroup {
     required this.name,
     required this.description,
     this.type = 'general',
+    this.isPrivate = false,
     this.membersCount = 0,
     this.isMember = false,
+    this.memberStatus,
     this.createdAt,
   });
+
+  bool get isPending => memberStatus == 'pending';
 
   factory SubGroup.fromJson(Map<String, dynamic> json) {
     return SubGroup(
@@ -122,8 +128,10 @@ class SubGroup {
       name: json['name'] ?? '',
       description: json['description'] ?? '',
       type: json['type'] ?? 'general',
+      isPrivate: json['is_private'] ?? json['isPrivate'] ?? false,
       membersCount: json['members_count'] ?? json['membersCount'] ?? 0,
       isMember: json['is_member'] ?? json['isMember'] ?? false,
+      memberStatus: json['member_status'] ?? json['memberStatus'],
       createdAt: parseUtcToLocal(json['created_at']) ?? parseUtcToLocal(json['createdAt']),
     );
   }
@@ -135,8 +143,10 @@ class SubGroup {
       'name': name,
       'description': description,
       'type': type,
+      'is_private': isPrivate,
       'members_count': membersCount,
       'is_member': isMember,
+      'member_status': memberStatus,
       'created_at': createdAt?.toIso8601String(),
     };
   }
@@ -147,8 +157,10 @@ class SubGroup {
     String? name,
     String? description,
     String? type,
+    bool? isPrivate,
     int? membersCount,
     bool? isMember,
+    String? memberStatus,
     DateTime? createdAt,
   }) {
     return SubGroup(
@@ -157,8 +169,10 @@ class SubGroup {
       name: name ?? this.name,
       description: description ?? this.description,
       type: type ?? this.type,
+      isPrivate: isPrivate ?? this.isPrivate,
       membersCount: membersCount ?? this.membersCount,
       isMember: isMember ?? this.isMember,
+      memberStatus: memberStatus ?? this.memberStatus,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -263,6 +277,7 @@ class CommunityEvent {
   final double totalDistance;
   final String? communityName;
   final String? communityImage;
+  final bool isPast;
   final DateTime? createdAt;
 
   CommunityEvent({
@@ -288,6 +303,7 @@ class CommunityEvent {
     this.totalDistance = 0,
     this.communityName,
     this.communityImage,
+    this.isPast = false,
     this.createdAt,
   });
 
@@ -327,6 +343,7 @@ class CommunityEvent {
       totalDistance: (json['total_distance_km'] ?? json['totalDistance'] ?? 0).toDouble(),
       communityName: json['community_name'] ?? json['communityName'],
       communityImage: json['community_image'] ?? json['communityImage'],
+      isPast: json['is_past'] ?? json['isPast'] ?? false,
       createdAt: parseUtcToLocal(json['created_at']) ?? parseUtcToLocal(json['createdAt']),
     );
   }
@@ -353,6 +370,7 @@ class CommunityEvent {
       'end_date': endDate?.toIso8601String(),
       'max_altitude_m': maxAltitude,
       'total_distance_km': totalDistance,
+      'is_past': isPast,
       'created_at': createdAt?.toIso8601String(),
     };
   }
@@ -378,6 +396,7 @@ class CommunityEvent {
     DateTime? endDate,
     double? maxAltitude,
     double? totalDistance,
+    bool? isPast,
     DateTime? createdAt,
   }) {
     return CommunityEvent(
@@ -401,6 +420,7 @@ class CommunityEvent {
       endDate: endDate ?? this.endDate,
       maxAltitude: maxAltitude ?? this.maxAltitude,
       totalDistance: totalDistance ?? this.totalDistance,
+      isPast: isPast ?? this.isPast,
       createdAt: createdAt ?? this.createdAt,
     );
   }

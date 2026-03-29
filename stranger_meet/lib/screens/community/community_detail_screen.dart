@@ -364,8 +364,9 @@ class _UpcomingEventsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(communityEventsProvider(communityId));
+    final upcomingEvents = state.events.where((e) => !e.isPast).toList();
 
-    if (state.isLoading || state.events.isEmpty) return const SizedBox.shrink();
+    if (state.isLoading || upcomingEvents.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,9 +406,9 @@ class _UpcomingEventsSection extends ConsumerWidget {
           height: 220,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: state.events.length,
+            itemCount: upcomingEvents.length,
             itemBuilder: (context, index) {
-              final event = state.events[index];
+              final event = upcomingEvents[index];
               return GestureDetector(
                 onTap: () => context
                     .push('/community/$communityId/event/${event.id}'),
@@ -634,6 +635,8 @@ class _GroupsHorizontalSection extends ConsumerWidget {
                               ),
                             ),
                           ),
+                          if (group.isPrivate)
+                            Icon(Icons.lock, size: 12, color: Colors.grey[500]),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -969,21 +972,58 @@ class _GroupsTab extends ConsumerWidget {
                             color: Colors.black87,
                           ),
                         ),
-                        title: Text(
-                          group.name,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                group.name,
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (group.isPrivate) ...[
+                              const SizedBox(width: 6),
+                              Icon(Icons.lock, size: 14, color: Colors.grey[600]),
+                            ],
+                          ],
                         ),
-                        subtitle: Text(
-                          '${group.membersCount} members',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[500],
-                          ),
+                        subtitle: Row(
+                          children: [
+                            Text(
+                              '${group.membersCount} members',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                            if (group.isPending) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Pending',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.amber,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                        onTap: () => context.push(
-                          '/community/$communityId/group/${group.id}',
-                        ),
+                        trailing: group.isPending
+                            ? Icon(Icons.hourglass_top, size: 20, color: Colors.amber[700])
+                            : const Icon(Icons.chevron_right, color: Colors.grey),
+                        onTap: group.isPending
+                            ? null
+                            : () => context.push(
+                                '/community/$communityId/group/${group.id}',
+                              ),
                       ),
                     );
                   },
@@ -996,14 +1036,21 @@ class _GroupsTab extends ConsumerWidget {
 
 // ── Events Tab ────────────────────────────────────────────────────
 
-class _EventsTab extends ConsumerWidget {
+class _EventsTab extends ConsumerStatefulWidget {
   final String communityId;
 
   const _EventsTab({required this.communityId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(communityEventsProvider(communityId));
+  ConsumerState<_EventsTab> createState() => _EventsTabState();
+}
+
+class _EventsTabState extends ConsumerState<_EventsTab> {
+  bool _pastExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(communityEventsProvider(widget.communityId));
 
     if (state.isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -1022,236 +1069,364 @@ class _EventsTab extends ConsumerWidget {
       );
     }
 
-    return ListView.builder(
+    final upcomingEvents = state.events.where((e) => !e.isPast).toList();
+    final pastEvents = state.events.where((e) => e.isPast).toList();
+
+    return ListView(
       padding: const EdgeInsets.all(16),
-      itemCount: state.events.length,
-      itemBuilder: (context, index) {
-        final event = state.events[index];
-        return GestureDetector(
-          onTap: () =>
-              context.push('/community/$communityId/event/${event.id}'),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade200),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+      children: [
+        // Upcoming Events Section
+        if (upcomingEvents.isNotEmpty) ...[
+          Row(
+            children: [
+              const Icon(Icons.upcoming, size: 18, color: Colors.black87),
+              const SizedBox(width: 8),
+              Text(
+                'Upcoming Events (${upcomingEvents.length})',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...upcomingEvents.map((event) => _buildEventCard(context, event, isPast: false)),
+        ],
+        if (upcomingEvents.isEmpty && pastEvents.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.event_available, size: 40, color: Colors.grey[400]),
+                const SizedBox(height: 8),
+                Text('No upcoming events', style: TextStyle(color: Colors.grey[500])),
               ],
             ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Event image
-                if (event.imageUrl != null && event.imageUrl!.isNotEmpty)
-                  Stack(
-                    children: [
-                      CachedNetworkImage(
+          ),
+
+        // Past Events Section
+        if (pastEvents.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: () => setState(() => _pastExpanded = !_pastExpanded),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.history, size: 18, color: Colors.grey[600]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Past Events (${pastEvents.length})',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _pastExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    color: Colors.grey[600],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_pastExpanded) ...[
+            const SizedBox(height: 12),
+            ...pastEvents.map((event) => _buildEventCard(context, event, isPast: true)),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildEventCard(BuildContext context, CommunityEvent event, {required bool isPast}) {
+    return GestureDetector(
+      onTap: () =>
+          context.push('/community/${widget.communityId}/event/${event.id}'),
+      child: Opacity(
+        opacity: isPast ? 0.7 : 1.0,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: isPast ? Colors.grey[50] : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isPast ? Colors.grey.shade300 : Colors.grey.shade200),
+            boxShadow: isPast ? [] : [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Event image
+              if (event.imageUrl != null && event.imageUrl!.isNotEmpty)
+                Stack(
+                  children: [
+                    ColorFiltered(
+                      colorFilter: isPast
+                          ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
+                          : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                      child: CachedNetworkImage(
                         imageUrl: event.imageUrl!,
                         width: double.infinity,
                         height: 150,
                         fit: BoxFit.cover,
                       ),
-                      if (event.isTrip)
-                        Positioned(
-                          top: 10,
-                          left: 10,
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.7),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  event.shortDurationLabel,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 11,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: event.difficulty.toLowerCase() == 'easy'
-                                      ? Colors.green
-                                      : event.difficulty.toLowerCase() == 'moderate'
-                                          ? Colors.orange
-                                          : Colors.red,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  event.difficulty[0].toUpperCase() +
-                                      event.difficulty.substring(1),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 11,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
+                    ),
+                    if (isPast)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[700],
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                        ),
-                    ],
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              event.title,
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          child: const Text(
+                            'Completed',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                              color: Colors.white,
                             ),
                           ),
+                        ),
+                      ),
+                    if (!isPast && event.isTrip)
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                event.shortDurationLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: event.difficulty.toLowerCase() == 'easy'
+                                    ? Colors.green
+                                    : event.difficulty.toLowerCase() == 'moderate'
+                                        ? Colors.orange
+                                        : Colors.red,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                event.difficulty[0].toUpperCase() +
+                                    event.difficulty.substring(1),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            event.title,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isPast
+                                ? Colors.grey[200]
+                                : event.price > 0
+                                    ? Colors.black
+                                    : Colors.green.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            event.price > 0
+                                ? '\u20B9${event.price.toStringAsFixed(0)}'
+                                : 'FREE',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: isPast
+                                  ? Colors.grey[600]
+                                  : event.price > 0
+                                      ? Colors.white
+                                      : Colors.green[800],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_today,
+                            size: 14, color: Colors.grey[500]),
+                        const SizedBox(width: 6),
+                        Text(
+                          event.endDate != null
+                              ? '${DateFormat('MMM d').format(event.date)} - ${DateFormat('MMM d, yyyy').format(event.endDate!)}'
+                              : DateFormat('MMM d, yyyy \u2022 hh:mm a')
+                                  .format(event.date),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on_outlined,
+                            size: 14, color: Colors.grey[500]),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            event.location.isNotEmpty
+                                ? event.location
+                                : 'Location TBD',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(Icons.people_outline,
+                            size: 16, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Text(
+                          isPast
+                              ? '${event.participantsCount} attended'
+                              : '${event.participantsCount}/${event.slots} enrolled',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const Spacer(),
+                        if (isPast)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
+                                horizontal: 14, vertical: 6),
                             decoration: BoxDecoration(
-                              color: event.price > 0
-                                  ? Colors.black
-                                  : Colors.green.withOpacity(0.15),
+                              color: Colors.grey[200],
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              event.price > 0
-                                  ? '\u20B9${event.price.toStringAsFixed(0)}'
-                                  : 'FREE',
+                              'Completed',
                               style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: event.price > 0
-                                    ? Colors.white
-                                    : Colors.green[800],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.calendar_today,
-                              size: 14, color: Colors.grey[500]),
-                          const SizedBox(width: 6),
-                          Text(
-                            event.endDate != null
-                                ? '${DateFormat('MMM d').format(event.date)} - ${DateFormat('MMM d, yyyy').format(event.endDate!)}'
-                                : DateFormat('MMM d, yyyy \u2022 hh:mm a')
-                                    .format(event.date),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.location_on_outlined,
-                              size: 14, color: Colors.grey[500]),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              event.location.isNotEmpty
-                                  ? event.location
-                                  : 'Location TBD',
-                              style: TextStyle(
-                                fontSize: 13,
                                 color: Colors.grey[600],
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Icon(Icons.people_outline,
-                              size: 16, color: Colors.grey[500]),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${event.participantsCount}/${event.slots} enrolled',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[600],
+                          )
+                        else if (event.isJoined)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ),
-                          const Spacer(),
-                          if (event.isJoined)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.check_circle,
-                                      size: 16, color: Colors.green),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Enrolled',
-                                    style: TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle,
+                                    size: 16, color: Colors.green),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Enrolled',
+                                  style: TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
                                   ),
-                                ],
-                              ),
-                            )
-                          else
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                event.isTrip ? 'View Trip' : 'View & Enroll',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
                                 ),
+                              ],
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              event.isTrip ? 'View Trip' : 'View & Enroll',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                               ),
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

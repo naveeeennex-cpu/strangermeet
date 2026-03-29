@@ -79,10 +79,12 @@ class SubGroupResponse(BaseModel):
     name: str
     description: str = ""
     type: str = "general"
+    is_private: bool = False
     created_by: str
     creator_name: Optional[str] = None
     members_count: int = 0
     is_member: bool = False
+    member_status: Optional[str] = None
     created_at: datetime
 
 
@@ -178,6 +180,7 @@ class CommunityEventResponse(BaseModel):
     total_distance_km: float = 0
     community_name: Optional[str] = None
     community_image: Optional[str] = None
+    is_past: bool = False
     created_at: datetime
 
 

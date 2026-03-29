@@ -65,7 +65,10 @@ class _CommunityGroupsScreenState
       if (mounted) {
         setState(() {
           _joinedGroups = groups.where((g) => g.isMember).toList();
-          _availableGroups = groups.where((g) => !g.isMember).toList();
+          _availableGroups = groups.where((g) => !g.isMember && !g.isPending).toList();
+          // Add pending groups to a separate area or show in available with badge
+          final pendingGroups = groups.where((g) => g.isPending).toList();
+          _availableGroups = [...pendingGroups, ..._availableGroups];
         });
       }
     } catch (_) {}
@@ -471,6 +474,7 @@ class _CommunityGroupsScreenState
   Widget _buildGroupTile(SubGroup group, {required bool isJoined}) {
     final typeColor = _groupTypeColor(group.type);
     final typeIcon = _groupTypeIcon(group.type);
+    final isPending = group.isPending;
 
     return Column(
       children: [
@@ -479,8 +483,17 @@ class _CommunityGroupsScreenState
             if (isJoined) {
               context.push(
                   '/community/${widget.communityId}/group/${group.id}');
+            } else if (isPending) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Your join request is pending approval')),
+              );
             } else {
-              _joinAndOpenGroup(group);
+              if (group.isPrivate) {
+                // Request to join
+                _requestToJoinGroup(group);
+              } else {
+                _joinAndOpenGroup(group);
+              }
             }
           },
           child: Padding(
@@ -510,31 +523,82 @@ class _CommunityGroupsScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        group.name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              group.name,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (group.isPrivate) ...[
+                            const SizedBox(width: 6),
+                            Icon(Icons.lock, size: 14, color: Colors.grey[500]),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        '${group.membersCount} member${group.membersCount == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppTheme.textSecondary,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            '${group.membersCount} member${group.membersCount == 1 ? '' : 's'}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          if (isPending) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Pending',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.amber,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
                 ),
                 // Trailing
-                if (!isJoined)
-                  const Icon(
-                    Icons.chevron_right,
-                    color: AppTheme.textSecondary,
-                  ),
+                if (!isJoined && !isPending)
+                  group.isPrivate
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Request',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        )
+                      : const Icon(
+                          Icons.chevron_right,
+                          color: AppTheme.textSecondary,
+                        ),
+                if (isPending)
+                  Icon(Icons.hourglass_top, size: 20, color: Colors.amber[700]),
               ],
             ),
           ),
@@ -549,5 +613,25 @@ class _CommunityGroupsScreenState
         ),
       ],
     );
+  }
+
+  Future<void> _requestToJoinGroup(SubGroup group) async {
+    try {
+      await _api.post(
+        '/communities/${widget.communityId}/groups/${group.id}/join',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Join request sent! Waiting for admin approval.')),
+        );
+        _fetchGroups();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send request: $e')),
+        );
+      }
+    }
   }
 }

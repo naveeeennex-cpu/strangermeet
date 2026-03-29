@@ -26,12 +26,14 @@ class _CommunityManageScreenState
   late TabController _tabController;
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _memberSearchController = TextEditingController();
   bool _isPrivate = false;
   bool _isEditLoading = false;
   List<User> _members = [];
+  List<User> _filteredMembers = [];
   bool _isMembersLoading = false;
+  String? _communityImageUrl;
 
-  // Admin events fetched via admin endpoint (with enrolled_count)
   List<Map<String, dynamic>> _adminEvents = [];
   bool _isAdminEventsLoading = false;
 
@@ -39,7 +41,23 @@ class _CommunityManageScreenState
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _memberSearchController.addListener(_filterMembers);
     _loadData();
+  }
+
+  void _filterMembers() {
+    final query = _memberSearchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredMembers = _members;
+      } else {
+        _filteredMembers = _members
+            .where((m) =>
+                m.name.toLowerCase().contains(query) ||
+                m.email.toLowerCase().contains(query))
+            .toList();
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -54,12 +72,12 @@ class _CommunityManageScreenState
         _nameController.text = community.name;
         _descriptionController.text = community.description;
         _isPrivate = community.isPrivate;
+        _communityImageUrl = community.imageUrl;
       }
     } catch (e) {
       debugPrint('ERROR loading community detail: $e');
     }
 
-    // Load these in parallel, don't let one failure block others
     _loadMembers();
     _loadAdminEvents();
 
@@ -81,6 +99,7 @@ class _CommunityManageScreenState
       if (mounted) {
         setState(() {
           _members = members;
+          _filteredMembers = members;
           _isMembersLoading = false;
         });
       }
@@ -146,13 +165,9 @@ class _CommunityManageScreenState
     final locationCtrl = TextEditingController(
         text: existing?['location']?.toString() ?? '');
     final priceCtrl = TextEditingController(
-        text: existing != null
-            ? (existing['price'] ?? 0).toString()
-            : '0');
+        text: existing != null ? (existing['price'] ?? 0).toString() : '0');
     final slotsCtrl = TextEditingController(
-        text: existing != null
-            ? (existing['slots'] ?? 0).toString()
-            : '0');
+        text: existing != null ? (existing['slots'] ?? 0).toString() : '0');
     final imageUrlCtrl = TextEditingController(
         text: existing?['image_url']?.toString() ?? '');
 
@@ -162,6 +177,8 @@ class _CommunityManageScreenState
             : DateTime.tryParse(existing['date'].toString()) ?? DateTime.now())
         : DateTime.now().add(const Duration(days: 1));
     TimeOfDay selectedTime = TimeOfDay.fromDateTime(selectedDate);
+
+    String selectedEventType = existing?['event_type']?.toString() ?? 'event';
 
     final isEdit = existing != null;
     final eventId = existing?['id']?.toString();
@@ -193,6 +210,31 @@ class _CommunityManageScreenState
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Event type toggle
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _EventTypeChip(
+                            label: 'Event',
+                            icon: Icons.event,
+                            isSelected: selectedEventType == 'event',
+                            onTap: () => setSheetState(
+                                () => selectedEventType = 'event'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _EventTypeChip(
+                            label: 'Trip',
+                            icon: Icons.terrain,
+                            isSelected: selectedEventType == 'trip',
+                            onTap: () => setSheetState(
+                                () => selectedEventType = 'trip'),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -334,9 +376,9 @@ class _CommunityManageScreenState
                             'location': locationCtrl.text.trim(),
                             'date': selectedDate.toUtc().toIso8601String(),
                             'price': double.tryParse(priceCtrl.text) ?? 0,
-                            'slots':
-                                int.tryParse(slotsCtrl.text) ?? 0,
+                            'slots': int.tryParse(slotsCtrl.text) ?? 0,
                             'image_url': imageUrlCtrl.text.trim(),
+                            'event_type': selectedEventType,
                           };
 
                           try {
@@ -360,7 +402,7 @@ class _CommunityManageScreenState
                             }
                           }
                         },
-                        child: Text(isEdit ? 'Update Event' : 'Create Event'),
+                        child: Text(isEdit ? 'Update' : 'Create'),
                       ),
                     ),
                   ],
@@ -424,17 +466,13 @@ class _CommunityManageScreenState
           children: [
             TextField(
               controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Group Name',
-              ),
+              decoration: const InputDecoration(labelText: 'Group Name'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: descCtrl,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-              ),
+              decoration: const InputDecoration(labelText: 'Description'),
             ),
           ],
         ),
@@ -521,6 +559,7 @@ class _CommunityManageScreenState
     _tabController.dispose();
     _nameController.dispose();
     _descriptionController.dispose();
+    _memberSearchController.dispose();
     super.dispose();
   }
 
@@ -563,14 +602,12 @@ class _CommunityManageScreenState
       builder: (context, _) {
         final index = _tabController.index;
         if (index == 2) {
-          // Groups tab
           return FloatingActionButton(
             backgroundColor: AppTheme.primaryColor,
             onPressed: () => _showCreateGroupDialog(),
             child: const Icon(Icons.add, color: Colors.black),
           );
         } else if (index == 3) {
-          // Events tab
           return FloatingActionButton(
             backgroundColor: AppTheme.primaryColor,
             onPressed: () => _showCreateEventSheet(),
@@ -587,20 +624,68 @@ class _CommunityManageScreenState
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Community image preview
+          if (_communityImageUrl != null && _communityImageUrl!.isNotEmpty)
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: CachedNetworkImage(
+                  imageUrl: _communityImageUrl!,
+                  width: double.infinity,
+                  height: 180,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => Container(
+                    height: 180,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.image, size: 48, color: Colors.grey),
+                  ),
+                ),
+              ),
+            )
+          else
+            Center(
+              child: Container(
+                width: double.infinity,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.image_outlined, size: 40, color: Colors.grey[400]),
+                    const SizedBox(height: 8),
+                    Text('No image set', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: 24),
+          const Text(
+            'Community Name',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 6),
           TextFormField(
             controller: _nameController,
             decoration: const InputDecoration(
-              labelText: 'Name',
               prefixIcon: Icon(Icons.group_outlined),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
+          const Text(
+            'Description',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 6),
           TextFormField(
             controller: _descriptionController,
             maxLines: 3,
             decoration: const InputDecoration(
-              labelText: 'Description',
               prefixIcon: Padding(
                 padding: EdgeInsets.only(bottom: 48),
                 child: Icon(Icons.description_outlined),
@@ -608,22 +693,36 @@ class _CommunityManageScreenState
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Private Community',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.lock_outline, size: 20, color: Colors.grey[600]),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Private Community',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Switch(
-                value: _isPrivate,
-                activeColor: AppTheme.primaryColor,
-                onChanged: (val) => setState(() => _isPrivate = val),
-              ),
-            ],
+                Switch(
+                  value: _isPrivate,
+                  activeColor: AppTheme.primaryColor,
+                  onChanged: (val) => setState(() => _isPrivate = val),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           SizedBox(
@@ -652,84 +751,189 @@ class _CommunityManageScreenState
     if (_isMembersLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_members.isEmpty) {
-      return Center(
-        child: Text('No members', style: TextStyle(color: Colors.grey[500])),
-      );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _members.length,
-      itemBuilder: (context, index) {
-        final member = _members[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: CircleAvatar(
-              radius: 22,
-              backgroundColor: AppTheme.surfaceColor,
-              backgroundImage: member.profileImageUrl != null
-                  ? CachedNetworkImageProvider(member.profileImageUrl!)
-                  : null,
-              child: member.profileImageUrl == null
-                  ? Text(
-                      member.name.isNotEmpty
-                          ? member.name[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+    return Column(
+      children: [
+        // Search bar
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _memberSearchController,
+            decoration: InputDecoration(
+              hintText: 'Search members...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _memberSearchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _memberSearchController.clear();
+                      },
                     )
                   : null,
             ),
-            title: Text(
-              member.name,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              member.email,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            trailing: IconButton(
-              icon: Icon(
-                Icons.person_remove_outlined,
-                color: AppTheme.errorColor,
-                size: 20,
-              ),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Remove Member'),
-                    content:
-                        Text('Remove ${member.name} from this community?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          await ref
-                              .read(adminCommunitiesProvider.notifier)
-                              .kickMember(widget.communityId, member.id);
-                          _loadMembers();
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppTheme.errorColor,
-                        ),
-                        child: const Text('Remove'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
           ),
-        );
-      },
+        ),
+        // Member count
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text(
+                '${_filteredMembers.length} member${_filteredMembers.length == 1 ? '' : 's'}',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _filteredMembers.isEmpty
+              ? Center(
+                  child: Text(
+                    _memberSearchController.text.isNotEmpty
+                        ? 'No members match your search'
+                        : 'No members',
+                    style: TextStyle(color: Colors.grey[500]),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _filteredMembers.length,
+                  itemBuilder: (context, index) {
+                    final member = _filteredMembers[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: AppTheme.surfaceColor,
+                          backgroundImage: member.profileImageUrl != null
+                              ? CachedNetworkImageProvider(
+                                  member.profileImageUrl!)
+                              : null,
+                          child: member.profileImageUrl == null
+                              ? Text(
+                                  member.name.isNotEmpty
+                                      ? member.name[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                member.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Role badge - show Admin if it's the first member (creator)
+                            if (index == 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Admin',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.blue[700],
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Member',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          member.email,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        trailing: index == 0
+                            ? null
+                            : IconButton(
+                                icon: Icon(
+                                  Icons.person_remove_outlined,
+                                  color: AppTheme.errorColor,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Remove Member'),
+                                      content: Text(
+                                          'Remove ${member.name} from this community?'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () async {
+                                            Navigator.pop(ctx);
+                                            await ref
+                                                .read(
+                                                    adminCommunitiesProvider
+                                                        .notifier)
+                                                .kickMember(
+                                                    widget.communityId,
+                                                    member.id);
+                                            _loadMembers();
+                                          },
+                                          style: TextButton.styleFrom(
+                                            foregroundColor:
+                                                AppTheme.errorColor,
+                                          ),
+                                          child: const Text('Remove'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -767,42 +971,365 @@ class _CommunityManageScreenState
           itemCount: groupsState.groups.length,
           itemBuilder: (context, index) {
             final group = groupsState.groups[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
-                  child: const Icon(Icons.group, color: AppTheme.textPrimary),
-                ),
-                title: Text(
-                  group.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  '${group.description.isNotEmpty ? group.description : group.type} - ${group.membersCount} members',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 20),
-                      onPressed: () =>
-                          _showCreateGroupDialog(existing: group),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor:
+                              AppTheme.primaryColor.withOpacity(0.2),
+                          child: const Icon(Icons.group,
+                              color: AppTheme.textPrimary, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      group.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Type badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[100],
+                                      borderRadius:
+                                          BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      group.type,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${group.membersCount} members',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Private/Public toggle
+                        Column(
+                          children: [
+                            GestureDetector(
+                              onTap: () async {
+                                try {
+                                  await ref
+                                      .read(adminCommunitiesProvider
+                                          .notifier)
+                                      .toggleGroupPrivate(
+                                          widget.communityId, group.id);
+                                  ref
+                                      .read(subGroupsProvider(
+                                              widget.communityId)
+                                          .notifier)
+                                      .fetchGroups();
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      SnackBar(
+                                          content: Text(e.toString())),
+                                    );
+                                  }
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: group.isPrivate
+                                      ? Colors.orange[50]
+                                      : Colors.green[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: group.isPrivate
+                                        ? Colors.orange.shade200
+                                        : Colors.green.shade200,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      group.isPrivate
+                                          ? Icons.lock
+                                          : Icons.lock_open,
+                                      size: 14,
+                                      color: group.isPrivate
+                                          ? Colors.orange[700]
+                                          : Colors.green[700],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      group.isPrivate
+                                          ? 'Private'
+                                          : 'Public',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: group.isPrivate
+                                            ? Colors.orange[700]
+                                            : Colors.green[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: Icon(Icons.delete_outline,
-                          size: 20, color: AppTheme.errorColor),
-                      onPressed: () => _showDeleteGroupDialog(group),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined,
+                                    size: 18),
+                                onPressed: () => _showCreateGroupDialog(
+                                    existing: group),
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(8),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.delete_outline,
+                                    size: 18,
+                                    color: AppTheme.errorColor),
+                                onPressed: () =>
+                                    _showDeleteGroupDialog(group),
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(8),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (group.isPrivate)
+                          GestureDetector(
+                            onTap: () => _showPendingRequestsDialog(group),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.amber[50],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.pending_actions,
+                                      size: 14, color: Colors.amber[800]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Requests',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.amber[800],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showPendingRequestsDialog(SubGroup group) async {
+    List<Map<String, dynamic>> requests = [];
+    bool isLoading = true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            if (isLoading) {
+              ref
+                  .read(adminCommunitiesProvider.notifier)
+                  .fetchPendingRequests(widget.communityId, group.id)
+                  .then((result) {
+                setDialogState(() {
+                  requests = result;
+                  isLoading = false;
+                });
+              }).catchError((_) {
+                setDialogState(() => isLoading = false);
+              });
+            }
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Expanded(child: Text('Pending Requests')),
+                  if (!isLoading)
+                    Text(
+                      '${requests.length}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: isLoading
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : requests.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('No pending requests'),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: requests.length,
+                            itemBuilder: (ctx, index) {
+                              final req = requests[index];
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: CircleAvatar(
+                                  backgroundColor: AppTheme.surfaceColor,
+                                  backgroundImage:
+                                      req['user_profile_image'] != null
+                                          ? CachedNetworkImageProvider(
+                                              req['user_profile_image'])
+                                          : null,
+                                  child: req['user_profile_image'] == null
+                                      ? Text(
+                                          (req['user_name'] ?? '?')[0]
+                                              .toUpperCase(),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700),
+                                        )
+                                      : null,
+                                ),
+                                title: Text(
+                                  req['user_name'] ?? 'Unknown',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                          Icons.check_circle,
+                                          color: Colors.green),
+                                      onPressed: () async {
+                                        try {
+                                          await ref
+                                              .read(
+                                                  adminCommunitiesProvider
+                                                      .notifier)
+                                              .approveJoinRequest(
+                                                  widget.communityId,
+                                                  group.id,
+                                                  req['user_id']);
+                                          setDialogState(() {
+                                            requests.removeAt(index);
+                                          });
+                                          ref
+                                              .read(subGroupsProvider(
+                                                      widget.communityId)
+                                                  .notifier)
+                                              .fetchGroups();
+                                        } catch (e) {
+                                          if (ctx.mounted) {
+                                            ScaffoldMessenger.of(ctx)
+                                                .showSnackBar(SnackBar(
+                                                    content: Text(
+                                                        e.toString())));
+                                          }
+                                        }
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.cancel,
+                                          color: Colors.red[400]),
+                                      onPressed: () async {
+                                        try {
+                                          await ref
+                                              .read(
+                                                  adminCommunitiesProvider
+                                                      .notifier)
+                                              .rejectJoinRequest(
+                                                  widget.communityId,
+                                                  group.id,
+                                                  req['user_id']);
+                                          setDialogState(() {
+                                            requests.removeAt(index);
+                                          });
+                                        } catch (e) {
+                                          if (ctx.mounted) {
+                                            ScaffoldMessenger.of(ctx)
+                                                .showSnackBar(SnackBar(
+                                                    content: Text(
+                                                        e.toString())));
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close'),
+                ),
+              ],
             );
           },
         );
@@ -825,55 +1352,152 @@ class _CommunityManageScreenState
             const SizedBox(height: 12),
             Text('No events yet',
                 style: TextStyle(color: Colors.grey[500])),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () => _showCreateEventSheet(),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Create Event'),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () => _showCreateEventSheet(),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Create Event'),
+                ),
+              ],
             ),
           ],
         ),
       );
     }
+
+    // Split into upcoming and past based on date
+    final now = DateTime.now();
+    final upcomingEvents = _adminEvents.where((e) {
+      final dateStr = e['date']?.toString();
+      if (dateStr == null) return true;
+      final date = DateTime.tryParse(dateStr);
+      return date == null || date.isAfter(now);
+    }).toList();
+    final pastEvents = _adminEvents.where((e) {
+      final dateStr = e['date']?.toString();
+      if (dateStr == null) return false;
+      final date = DateTime.tryParse(dateStr);
+      return date != null && date.isBefore(now);
+    }).toList();
+
     return RefreshIndicator(
       onRefresh: _loadAdminEvents,
-      child: ListView.builder(
+      child: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: _adminEvents.length,
-        itemBuilder: (context, index) {
-          final event = _adminEvents[index];
-          final title = event['title']?.toString() ?? 'Untitled';
-          final enrolled = event['enrolled_count'] ?? 0;
-          final slots = event['slots'] ?? 0;
-          final price = (event['price'] ?? 0).toDouble();
-          final location = event['location']?.toString() ?? '';
-          final dateStr = event['date']?.toString();
-          final eventDate =
-              dateStr != null ? DateTime.tryParse(dateStr) : null;
-          final progress =
-              slots > 0 ? (enrolled / slots).clamp(0.0, 1.0) : 0.0;
-          final eventId = event['id']?.toString() ?? '';
+        children: [
+          // Upcoming section
+          if (upcomingEvents.isNotEmpty) ...[
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Upcoming (${upcomingEvents.length})',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.green[700],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...upcomingEvents.map((e) => _buildAdminEventCard(e, isPast: false)),
+          ],
 
-          final eventType = event['event_type']?.toString() ?? 'event';
-          final isTrip = eventType == 'trip';
+          // Past section
+          if (pastEvents.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Past Events (${pastEvents.length})',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...pastEvents.map((e) => _buildAdminEventCard(e, isPast: true)),
+          ],
+        ],
+      ),
+    );
+  }
 
-          return Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: Padding(
+  Widget _buildAdminEventCard(Map<String, dynamic> event, {required bool isPast}) {
+    final title = event['title']?.toString() ?? 'Untitled';
+    final enrolled = event['enrolled_count'] ?? 0;
+    final slots = event['slots'] ?? 0;
+    final price = (event['price'] ?? 0).toDouble();
+    final location = event['location']?.toString() ?? '';
+    final dateStr = event['date']?.toString();
+    final eventDate = dateStr != null ? DateTime.tryParse(dateStr) : null;
+    final progress = slots > 0 ? (enrolled / slots).clamp(0.0, 1.0) : 0.0;
+    final eventId = event['id']?.toString() ?? '';
+    final eventType = event['event_type']?.toString() ?? 'event';
+    final isTrip = eventType == 'trip';
+    final imageUrl = event['image_url']?.toString() ?? '';
+
+    return Opacity(
+      opacity: isPast ? 0.7 : 1.0,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: isPast ? Colors.grey.shade300 : Colors.grey.shade200),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image thumbnail
+            if (imageUrl.isNotEmpty)
+              SizedBox(
+                height: 100,
+                width: double.infinity,
+                child: ColorFiltered(
+                  colorFilter: isPast
+                      ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
+                      : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      // Trip / Event badge
+                      // Type badge
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: isTrip
-                              ? Colors.teal[50]
-                              : Colors.indigo[50],
+                          color: isTrip ? Colors.teal[50] : Colors.indigo[50],
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -881,10 +1505,8 @@ class _CommunityManageScreenState
                           children: [
                             Icon(
                               isTrip ? Icons.terrain : Icons.event,
-                              size: 13,
-                              color: isTrip
-                                  ? Colors.teal[700]
-                                  : Colors.indigo[700],
+                              size: 12,
+                              color: isTrip ? Colors.teal[700] : Colors.indigo[700],
                             ),
                             const SizedBox(width: 4),
                             Text(
@@ -892,22 +1514,39 @@ class _CommunityManageScreenState
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: isTrip
-                                    ? Colors.teal[700]
-                                    : Colors.indigo[700],
+                                color: isTrip ? Colors.teal[700] : Colors.indigo[700],
                               ),
                             ),
                           ],
                         ),
                       ),
+                      if (isPast) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Completed',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           title,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       PopupMenuButton<String>(
@@ -966,8 +1605,8 @@ class _CommunityManageScreenState
                                     size: 18, color: AppTheme.errorColor),
                                 const SizedBox(width: 8),
                                 Text('Delete',
-                                    style: TextStyle(
-                                        color: AppTheme.errorColor)),
+                                    style:
+                                        TextStyle(color: AppTheme.errorColor)),
                               ],
                             ),
                           ),
@@ -980,24 +1619,22 @@ class _CommunityManageScreenState
                     children: [
                       if (eventDate != null) ...[
                         Icon(Icons.calendar_today,
-                            size: 14, color: Colors.grey[600]),
+                            size: 13, color: Colors.grey[600]),
                         const SizedBox(width: 4),
                         Text(
                           DateFormat('MMM d, yyyy').format(eventDate),
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey[600]),
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                         ),
                         const SizedBox(width: 12),
                       ],
                       if (location.isNotEmpty) ...[
                         Icon(Icons.location_on_outlined,
-                            size: 14, color: Colors.grey[600]),
+                            size: 13, color: Colors.grey[600]),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
                             location,
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1023,15 +1660,15 @@ class _CommunityManageScreenState
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
-                            color: price > 0
-                                ? Colors.green[700]
-                                : Colors.black87,
+                            color: price > 0 ? Colors.green[700] : Colors.black87,
                           ),
                         ),
                       ),
                       const Spacer(),
                       Text(
-                        '$enrolled/$slots enrolled',
+                        isPast
+                            ? '$enrolled attended'
+                            : '$enrolled/$slots enrolled',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -1045,14 +1682,14 @@ class _CommunityManageScreenState
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: progress,
-                      backgroundColor: AppTheme.surfaceColor,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppTheme.primaryColor),
+                      backgroundColor: Colors.grey[200],
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isPast ? Colors.grey : AppTheme.primaryColor,
+                      ),
                       minHeight: 6,
                     ),
                   ),
-                  // Manage Trip button for trip-type events
-                  if (isTrip) ...[
+                  if (isTrip && !isPast) ...[
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,
@@ -1077,10 +1714,55 @@ class _CommunityManageScreenState
                 ],
               ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
 }
 
+class _EventTypeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _EventTypeChip({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryColor.withOpacity(0.2) : Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: isSelected ? Colors.black : Colors.grey[600]),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? Colors.black : Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

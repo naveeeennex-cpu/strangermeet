@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 from schemas.community import (
     CommunityResponse, CommunityUpdate, CommunityMemberResponse,
@@ -168,6 +168,7 @@ async def list_community_events_admin(
         ORDER BY ce.date ASC
     """, community_id)
 
+    now = datetime.utcnow()
     return [
         {k: _serialize_value(v) for k, v in dict(row).items()}
         | {
@@ -175,6 +176,7 @@ async def list_community_events_admin(
             "community_id": str(row["community_id"]),
             "created_by": str(row["created_by"]),
             "enrolled_count": row["enrolled_count"],
+            "is_past": row["date"] < now if row["date"] else False,
         }
         for row in rows
     ]
@@ -480,6 +482,7 @@ async def admin_update_sub_group(
         name=row["name"],
         description=row["description"],
         type=row["type"],
+        is_private=row.get("is_private", False) or False,
         created_by=str(row["created_by"]),
         creator_name=creator["name"] if creator else None,
         members_count=members_count or 0,
@@ -589,3 +592,131 @@ async def admin_all_payments(
         }
         for row in rows
     ]
+
+
+@router.put("/communities/{community_id}/groups/{group_id}/toggle-private")
+async def admin_toggle_group_private(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(require_partner),
+):
+    """Toggle a sub-group between private and public."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    community = await pool.fetchrow(
+        "SELECT id FROM communities WHERE id = $1 AND created_by = $2",
+        community_id, user_id
+    )
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found or not owned by you")
+
+    row = await pool.fetchrow(
+        "UPDATE sub_groups SET is_private = NOT COALESCE(is_private, false) WHERE id = $1 AND community_id = $2 RETURNING id, is_private",
+        group_id, community_id
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sub-group not found")
+
+    return {"id": str(row["id"]), "is_private": row["is_private"]}
+
+
+@router.get("/communities/{community_id}/groups/{group_id}/pending-requests")
+async def admin_get_pending_requests(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(require_partner),
+):
+    """Get pending join requests for a private sub-group."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    community = await pool.fetchrow(
+        "SELECT id FROM communities WHERE id = $1 AND created_by = $2",
+        community_id, user_id
+    )
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found or not owned by you")
+
+    rows = await pool.fetch(
+        """SELECT sgm.id, sgm.user_id, sgm.joined_at,
+                  u.name AS user_name, u.profile_image_url AS user_profile_image
+           FROM sub_group_members sgm
+           JOIN users u ON sgm.user_id = u.id
+           WHERE sgm.sub_group_id = $1 AND sgm.status = 'pending'
+           ORDER BY sgm.joined_at ASC""",
+        group_id
+    )
+
+    return [
+        {
+            "id": str(row["id"]),
+            "user_id": str(row["user_id"]),
+            "user_name": row["user_name"],
+            "user_profile_image": row.get("user_profile_image"),
+            "requested_at": row["joined_at"].isoformat() if row["joined_at"] else None,
+        }
+        for row in rows
+    ]
+
+
+@router.post("/communities/{community_id}/groups/{group_id}/approve-request/{member_user_id}")
+async def admin_approve_join_request(
+    community_id: str,
+    group_id: str,
+    member_user_id: str,
+    request: Request,
+    current_user: dict = Depends(require_partner),
+):
+    """Approve a pending join request for a sub-group."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    community = await pool.fetchrow(
+        "SELECT id FROM communities WHERE id = $1 AND created_by = $2",
+        community_id, user_id
+    )
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found or not owned by you")
+
+    result = await pool.execute(
+        "UPDATE sub_group_members SET status = 'active' WHERE sub_group_id = $1 AND user_id = $2 AND status = 'pending'",
+        group_id, member_user_id
+    )
+
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending request found")
+
+    return {"detail": "Join request approved"}
+
+
+@router.post("/communities/{community_id}/groups/{group_id}/reject-request/{member_user_id}")
+async def admin_reject_join_request(
+    community_id: str,
+    group_id: str,
+    member_user_id: str,
+    request: Request,
+    current_user: dict = Depends(require_partner),
+):
+    """Reject a pending join request for a sub-group."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    community = await pool.fetchrow(
+        "SELECT id FROM communities WHERE id = $1 AND created_by = $2",
+        community_id, user_id
+    )
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found or not owned by you")
+
+    result = await pool.execute(
+        "DELETE FROM sub_group_members WHERE sub_group_id = $1 AND user_id = $2 AND status = 'pending'",
+        group_id, member_user_id
+    )
+
+    if result == "DELETE 0":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending request found")
+
+    return {"detail": "Join request rejected"}

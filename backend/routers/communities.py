@@ -830,6 +830,7 @@ async def create_sub_group(
         name=row["name"],
         description=row["description"],
         type=row["type"],
+        is_private=row.get("is_private", False) or False,
         created_by=str(row["created_by"]),
         creator_name=current_user["name"],
         members_count=1,
@@ -849,8 +850,9 @@ async def list_sub_groups(
 
     rows = await pool.fetch(
         """SELECT sg.*, u.name AS creator_name,
-                  (SELECT COUNT(*) FROM sub_group_members WHERE sub_group_id = sg.id) AS members_count,
-                  EXISTS(SELECT 1 FROM sub_group_members WHERE sub_group_id = sg.id AND user_id = $2) AS is_member
+                  (SELECT COUNT(*) FROM sub_group_members WHERE sub_group_id = sg.id AND status = 'active') AS members_count,
+                  EXISTS(SELECT 1 FROM sub_group_members WHERE sub_group_id = sg.id AND user_id = $2 AND status = 'active') AS is_member,
+                  (SELECT status FROM sub_group_members WHERE sub_group_id = sg.id AND user_id = $2 LIMIT 1) AS member_status
            FROM sub_groups sg
            JOIN users u ON sg.created_by = u.id
            WHERE sg.community_id = $1
@@ -865,10 +867,12 @@ async def list_sub_groups(
             name=row["name"],
             description=row["description"],
             type=row["type"],
+            is_private=row.get("is_private", False) or False,
             created_by=str(row["created_by"]),
             creator_name=row["creator_name"],
             members_count=row["members_count"],
             is_member=row["is_member"],
+            member_status=row.get("member_status"),
             created_at=row["created_at"],
         )
         for row in rows
@@ -909,6 +913,7 @@ async def update_sub_group(
         name=row["name"],
         description=row["description"],
         type=row["type"],
+        is_private=row.get("is_private", False) or False,
         created_by=str(row["created_by"]),
         creator_name=creator["name"] if creator else None,
         members_count=members_count or 0,
@@ -954,7 +959,7 @@ async def join_sub_group(
 
     try:
         group = await pool.fetchrow(
-            "SELECT id FROM sub_groups WHERE id = $1 AND community_id = $2",
+            "SELECT id, is_private FROM sub_groups WHERE id = $1 AND community_id = $2",
             group_id, community_id
         )
     except Exception:
@@ -963,10 +968,37 @@ async def join_sub_group(
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sub-group not found")
 
-    await pool.execute(
-        "INSERT INTO sub_group_members (sub_group_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    is_private = group.get("is_private", False)
+
+    # Check if already a member or has a pending request
+    existing = await pool.fetchrow(
+        "SELECT id, status FROM sub_group_members WHERE sub_group_id = $1 AND user_id = $2",
         group_id, user_id
     )
+    if existing:
+        if existing["status"] == "active":
+            return {"detail": "Already a member"}
+        elif existing["status"] == "pending":
+            return {"detail": "Join request already pending", "status": "pending"}
+        # If rejected, allow re-request by updating status
+        member_status = "pending" if is_private else "active"
+        await pool.execute(
+            "UPDATE sub_group_members SET status = $1 WHERE sub_group_id = $2 AND user_id = $3",
+            member_status, group_id, user_id
+        )
+        if member_status == "pending":
+            return {"detail": "Join request sent", "status": "pending"}
+        return {"detail": "Joined sub-group"}
+
+    member_status = "pending" if is_private else "active"
+
+    await pool.execute(
+        "INSERT INTO sub_group_members (sub_group_id, user_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+        group_id, user_id, member_status
+    )
+
+    if member_status == "pending":
+        return {"detail": "Join request sent", "status": "pending"}
 
     return {"detail": "Joined sub-group"}
 
@@ -1183,6 +1215,10 @@ async def delete_sub_group_message(
 # ── Helper: build event response with trip fields ────────────────────────────
 
 def _event_row_to_response(row, creator_name=None, is_booked=False, participants_count=0):
+    from datetime import datetime as dt
+    event_date = row["date"]
+    is_past = event_date < dt.utcnow() if event_date else False
+
     return CommunityEventResponse(
         id=str(row["id"]),
         community_id=str(row["community_id"]),
@@ -1209,6 +1245,7 @@ def _event_row_to_response(row, creator_name=None, is_booked=False, participants
         total_distance_km=row.get("total_distance_km", 0) or 0,
         community_name=row.get("community_name"),
         community_image=row.get("community_image"),
+        is_past=is_past,
         created_at=row["created_at"],
     )
 
