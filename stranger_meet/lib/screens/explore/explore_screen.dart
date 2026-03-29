@@ -215,7 +215,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             .toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async => _applyFilters(),
@@ -250,7 +250,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                         onTap: () => context.push('/profile'),
                         child: CircleAvatar(
                           radius: 24,
-                          backgroundColor: AppTheme.surfaceColor,
+                          backgroundColor: Theme.of(context).colorScheme.surface,
                           backgroundImage:
                               user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty
                                   ? CachedNetworkImageProvider(user.profileImageUrl!)
@@ -279,7 +279,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                       hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
                       prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
                       filled: true,
-                      fillColor: const Color(0xFFF5F5F5),
+                      fillColor: Theme.of(context).inputDecorationTheme.fillColor,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide.none,
@@ -308,7 +308,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF2F2F2),
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     padding: const EdgeInsets.all(4),
@@ -325,7 +325,10 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: isSelected ? Colors.white : Colors.transparent,
+                                color: isSelected
+                                    ? Theme.of(context).cardTheme.color ??
+                                        Theme.of(context).scaffoldBackgroundColor
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(10),
                                 boxShadow: isSelected
                                     ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))]
@@ -337,7 +340,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                                   style: TextStyle(
                                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                                     fontSize: 14,
-                                    color: isSelected ? Colors.black : Colors.grey[500],
+                                    color: isSelected
+                                        ? Theme.of(context).textTheme.bodyLarge?.color
+                                        : Theme.of(context).textTheme.bodySmall?.color,
                                   ),
                                 ),
                               ),
@@ -379,11 +384,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: Theme.of(context).cardTheme.color ??
+                                      Theme.of(context).colorScheme.surface,
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Colors.grey.shade300),
+                                  border: Border.all(color: Theme.of(context).dividerColor),
                                 ),
-                                child: Icon(Icons.tune, size: 18, color: Colors.grey[600]),
+                                child: Icon(Icons.tune, size: 18,
+                                    color: Theme.of(context).textTheme.bodySmall?.color),
                               ),
                             ),
                           );
@@ -402,10 +409,15 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
-                                color: isSelected ? AppTheme.primaryColor : Colors.white,
+                                color: isSelected
+                                    ? AppTheme.primaryColor
+                                    : Theme.of(context).cardTheme.color ??
+                                        Theme.of(context).colorScheme.surface,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+                                  color: isSelected
+                                      ? AppTheme.primaryColor
+                                      : Theme.of(context).dividerColor,
                                 ),
                               ),
                               child: Row(
@@ -417,7 +429,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                                       child: Icon(
                                         loc == 'Nearby' ? Icons.my_location : Icons.location_on,
                                         size: 14,
-                                        color: isSelected ? Colors.black87 : Colors.grey[500],
+                                        color: isSelected
+                                            ? Colors.black87
+                                            : Theme.of(context).textTheme.bodySmall?.color,
                                       ),
                                     ),
                                   Text(
@@ -427,7 +441,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                      color: isSelected ? Colors.black87 : Colors.grey[600],
+                                      color: isSelected
+                                          ? Colors.black87
+                                          : Theme.of(context).textTheme.bodySmall?.color,
                                     ),
                                   ),
                                 ],

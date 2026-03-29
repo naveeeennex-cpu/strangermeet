@@ -80,6 +80,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String phone = '',
     List<String> interests = const [],
     String role = 'customer',
+    String occupation = '',
+    String collegeName = '',
+    String companyName = '',
   }) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
@@ -91,6 +94,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         phone: phone,
         interests: interests,
         role: role,
+        occupation: occupation,
+        collegeName: collegeName,
+        companyName: companyName,
       );
       state = AuthState(
         status: AuthStatus.authenticated,

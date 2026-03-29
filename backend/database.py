@@ -93,6 +93,26 @@ async def init_db():
             END $$;
         """)
 
+        # Add occupation fields
+        await conn.execute("""
+            DO $$ BEGIN
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS occupation VARCHAR(50) DEFAULT '';
+            EXCEPTION WHEN duplicate_column THEN NULL;
+            END $$;
+        """)
+        await conn.execute("""
+            DO $$ BEGIN
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS college_name VARCHAR(200) DEFAULT '';
+            EXCEPTION WHEN duplicate_column THEN NULL;
+            END $$;
+        """)
+        await conn.execute("""
+            DO $$ BEGIN
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(200) DEFAULT '';
+            EXCEPTION WHEN duplicate_column THEN NULL;
+            END $$;
+        """)
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS posts (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

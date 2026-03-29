@@ -328,6 +328,10 @@ class CommunityMessagesNotifier
     }
   }
 
+  void setMessages(List<CommunityMessage> messages) {
+    state = state.copyWith(messages: messages);
+  }
+
   Future<void> sendMessage(String text, {String imageUrl = '', String messageType = 'text'}) async {
     try {
       final response = await _api.post(
@@ -480,6 +484,10 @@ class SubGroupMessagesNotifier extends StateNotifier<SubGroupMessagesState> {
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
+  }
+
+  void setMessages(List<CommunityMessage> messages) {
+    state = state.copyWith(messages: messages);
   }
 
   Future<void> sendMessage(String text, {String imageUrl = '', String messageType = 'text'}) async {

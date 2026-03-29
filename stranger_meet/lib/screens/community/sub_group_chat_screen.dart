@@ -7,11 +7,21 @@ import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
 
 import '../../config/theme.dart';
+import '../../models/community.dart';
 import '../../providers/community_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/chat_background.dart';
-import '../../widgets/date_separator.dart';
+import '../../widgets/message_actions_sheet.dart';
+
+// ── Dark theme constants ─────────────────────────────────────────────────────
+const Color _kChatScaffoldBg = Color(0xFF0A0A0A);
+const Color _kChatAppBarBg = Color(0xFF1A1A1A);
+const Color _kChatAreaBg = Color(0xFF0A0A0A);
+const Color _kMyBubbleColor = Color(0xFF1B5E20);
+const Color _kOtherBubbleColor = Color(0xFF1E1E1E);
+const Color _kInputBarBg = Color(0xFF1A1A1A);
+const Color _kInputFieldBg = Color(0xFF2A2A2A);
 
 // ── Model for sub-group member ──────────────────────────────────────────────
 
@@ -193,7 +203,11 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       await ref
           .read(subGroupMessagesProvider(_providerKey).notifier)
           .sendMessage(text);
-      _scrollToBottom();
+      if (mounted) {
+        setState(() {});
+        await Future.delayed(const Duration(milliseconds: 100));
+        _scrollToBottom();
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -238,7 +252,11 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       await ref
           .read(subGroupMessagesProvider(_providerKey).notifier)
           .sendMessage('', imageUrl: imageUrl, messageType: 'image');
-      _scrollToBottom();
+      if (mounted) {
+        setState(() {});
+        await Future.delayed(const Duration(milliseconds: 100));
+        _scrollToBottom();
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -257,6 +275,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E1E1E),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -275,7 +294,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey[300],
+                    color: Colors.grey[600],
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -285,28 +304,29 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   child: Row(
                     children: [
-                      const Icon(Icons.group, size: 22),
+                      const Icon(Icons.group, size: 22, color: Colors.white),
                       const SizedBox(width: 8),
                       Text(
                         'Members (${membersState.members.length})',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Divider(),
+                const Divider(color: Color(0xFF333333)),
                 // Members list
                 Expanded(
                   child: membersState.isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Center(child: CircularProgressIndicator(color: Colors.white))
                       : membersState.members.isEmpty
                           ? Center(
                               child: Text(
                                 'No members yet',
-                                style: TextStyle(color: Colors.grey[400]),
+                                style: TextStyle(color: Colors.grey[500]),
                               ),
                             )
                           : ListView.builder(
@@ -328,6 +348,104 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
     );
   }
 
+  Future<void> _handleMessageLongPress(CommunityMessage message) async {
+    final isOwn = message.userId == _currentUserId;
+    final isText = message.messageType == 'text';
+
+    final action = await MessageActionsSheet.show(
+      context,
+      isOwnMessage: isOwn,
+      isTextMessage: isText,
+      messageText: message.message,
+    );
+
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case 'edit':
+        _showEditDialog(message);
+        break;
+      case 'delete_for_me':
+        final messages = ref.read(subGroupMessagesProvider(_providerKey)).messages;
+        final updated = messages.where((m) => m.id != message.id).toList();
+        ref.read(subGroupMessagesProvider(_providerKey).notifier).setMessages(updated);
+        break;
+      case 'delete_for_everyone':
+        try {
+          await ApiService().delete(
+            '/communities/${widget.communityId}/groups/${widget.groupId}/messages/${message.id}',
+          );
+          final messages = ref.read(subGroupMessagesProvider(_providerKey)).messages;
+          final updated = messages.where((m) => m.id != message.id).toList();
+          ref.read(subGroupMessagesProvider(_providerKey).notifier).setMessages(updated);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to delete: $e')),
+            );
+          }
+        }
+        break;
+      case 'copy':
+        break;
+    }
+  }
+
+  void _showEditDialog(CommunityMessage message) {
+    final controller = TextEditingController(text: message.message);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Edit message', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Edit your message...',
+            hintStyle: TextStyle(color: Colors.grey),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final newText = controller.text.trim();
+              if (newText.isEmpty) return;
+              try {
+                await ApiService().put(
+                  '/communities/${widget.communityId}/groups/${widget.groupId}/messages/${message.id}',
+                  data: {'message': newText},
+                );
+                final messages = ref.read(subGroupMessagesProvider(_providerKey)).messages;
+                final updated = messages.map((m) {
+                  if (m.id == message.id) {
+                    final editedText = newText.endsWith(' (edited)') ? newText : '$newText (edited)';
+                    return m.copyWith(message: editedText);
+                  }
+                  return m;
+                }).toList();
+                ref.read(subGroupMessagesProvider(_providerKey).notifier).setMessages(updated);
+                if (mounted) Navigator.pop(ctx);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to edit: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(subGroupMessagesProvider(_providerKey));
@@ -335,8 +453,12 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
         ref.watch(subGroupMembersProvider(_providerKey));
 
     return Scaffold(
+      backgroundColor: _kChatScaffoldBg,
       appBar: AppBar(
-        title: const Text('Group Chat'),
+        backgroundColor: _kChatAppBarBg,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Group Chat',
+            style: TextStyle(color: Colors.white)),
         actions: [
           InkWell(
             onTap: _showMembersBottomSheet,
@@ -346,13 +468,14 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.group, size: 20),
+                  const Icon(Icons.group, size: 20, color: Colors.white),
                   const SizedBox(width: 4),
                   Text(
                     '${membersState.members.length}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -364,7 +487,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       ),
       body: Column(
         children: [
-          // Members preview strip
+          // Members preview strip (dark)
           if (!membersState.isLoading && membersState.members.isNotEmpty)
             _MembersPreviewStrip(
               members: membersState.members,
@@ -373,21 +496,21 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
           // Chat messages
           Expanded(
             child: Container(
-              color: kChatBackgroundColor,
+              color: _kChatAreaBg,
               child: Stack(
                 children: [
                   Positioned.fill(
                     child: CustomPaint(
-                      painter: ChatBackgroundPainter(),
+                      painter: ChatBackgroundPainter(isDark: true),
                     ),
                   ),
                   state.isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Center(child: CircularProgressIndicator(color: Colors.white))
                       : state.messages.isEmpty
                           ? Center(
                               child: Text(
                                 'Start the conversation!',
-                                style: TextStyle(color: Colors.grey[400]),
+                                style: TextStyle(color: Colors.grey[600]),
                               ),
                             )
                           : ListView.builder(
@@ -398,25 +521,28 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                                 final message = state.messages[index];
                                 final isMe = message.userId == _currentUserId;
                                 final showDateSeparator = index == 0 ||
-                                    DateSeparator.isDifferentDay(
+                                    _isDifferentDay(
                                       state.messages[index - 1].timestamp,
                                       message.timestamp,
                                     );
                                 return Column(
                                   children: [
                                     if (showDateSeparator && message.timestamp != null)
-                                      DateSeparator(date: message.timestamp!),
-                                    _GroupMessageBubble(
-                                      senderName: message.userName,
-                                      senderImage: message.userImage,
-                                      message: message.message,
-                                      isMe: isMe,
-                                      time: message.timestamp != null
-                                          ? DateFormat('hh:mm a')
-                                              .format(message.timestamp!)
-                                          : '',
-                                      imageUrl: message.imageUrl,
-                                      messageType: message.messageType,
+                                      _DarkDateSeparator(date: message.timestamp!),
+                                    GestureDetector(
+                                      onLongPress: () => _handleMessageLongPress(message),
+                                      child: _GroupMessageBubble(
+                                        senderName: message.userName,
+                                        senderImage: message.userImage,
+                                        message: message.message,
+                                        isMe: isMe,
+                                        time: message.timestamp != null
+                                            ? DateFormat('hh:mm a')
+                                                .format(message.timestamp!)
+                                            : '',
+                                        imageUrl: message.imageUrl,
+                                        messageType: message.messageType,
+                                      ),
                                     ),
                                   ],
                                 );
@@ -430,30 +556,32 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
           if (_isUploading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 4),
-              child: LinearProgressIndicator(),
+              child: LinearProgressIndicator(color: AppTheme.primaryColor),
             ),
           Container(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
+            decoration: const BoxDecoration(
+              color: _kInputBarBg,
               border: Border(
-                top: BorderSide(color: Colors.grey[200]!),
+                top: BorderSide(color: Color(0xFF2A2A2A)),
               ),
             ),
             child: SafeArea(
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.image, color: Colors.grey[600]),
+                    icon: Icon(Icons.image, color: Colors.grey[500]),
                     onPressed: _isUploading ? null : _pickAndSendImage,
                   ),
                   Expanded(
                     child: TextField(
                       controller: _messageController,
+                      style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Type a message...',
+                        hintStyle: TextStyle(color: Colors.grey[600]),
                         filled: true,
-                        fillColor: AppTheme.surfaceColor,
+                        fillColor: _kInputFieldBg,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
@@ -485,9 +613,54 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       ),
     );
   }
+
+  bool _isDifferentDay(DateTime? a, DateTime? b) {
+    if (a == null || b == null) return true;
+    return a.year != b.year || a.month != b.month || a.day != b.day;
+  }
 }
 
-// ── Members preview strip (horizontal avatars above chat) ───────────────────
+// ── Dark date separator ──────────────────────────────────────────────────────
+
+class _DarkDateSeparator extends StatelessWidget {
+  final DateTime date;
+  const _DarkDateSeparator({required this.date});
+
+  String _getLabel() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(date.year, date.month, date.day);
+    final diff = today.difference(messageDate).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (date.year == now.year) return DateFormat('EEE, MMM d').format(date);
+    return DateFormat('MMM d, yyyy').format(date);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2A),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          _getLabel(),
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[500],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Members preview strip (dark) ────────────────────────────────────────────
 
 class _MembersPreviewStrip extends StatelessWidget {
   final List<SubGroupMember> members;
@@ -502,10 +675,10 @@ class _MembersPreviewStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
+      decoration: const BoxDecoration(
+        color: _kChatAppBarBg,
         border: Border(
-          bottom: BorderSide(color: Colors.grey[200]!),
+          bottom: BorderSide(color: Color(0xFF2A2A2A)),
         ),
       ),
       child: Column(
@@ -518,7 +691,7 @@ class _MembersPreviewStrip extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+                  color: Colors.white70,
                 ),
               ),
               const Spacer(),
@@ -529,7 +702,7 @@ class _MembersPreviewStrip extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: AppTheme.primaryDark,
+                    color: AppTheme.primaryColor,
                   ),
                 ),
               ),
@@ -558,7 +731,8 @@ class _MembersPreviewStrip extends StatelessWidget {
                           width: 50,
                           child: Text(
                             member.userName ?? 'User',
-                            style: const TextStyle(fontSize: 10),
+                            style: const TextStyle(
+                                fontSize: 10, color: Colors.white70),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
@@ -577,7 +751,7 @@ class _MembersPreviewStrip extends StatelessWidget {
   }
 }
 
-// ── Member list tile (for bottom sheet) ─────────────────────────────────────
+// ── Member list tile (dark) ─────────────────────────────────────────────────
 
 class _MemberListTile extends StatelessWidget {
   final SubGroupMember member;
@@ -594,7 +768,8 @@ class _MemberListTile extends StatelessWidget {
       ),
       title: Text(
         member.userName ?? 'Unknown User',
-        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+        style: const TextStyle(
+            fontWeight: FontWeight.w500, fontSize: 15, color: Colors.white),
       ),
       subtitle: member.joinedAt != null
           ? Text(
@@ -602,7 +777,7 @@ class _MemberListTile extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: Colors.grey[500]),
             )
           : null,
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+      trailing: Icon(Icons.chevron_right, color: Colors.grey[600]),
       onTap: () {
         Navigator.of(context).pop(); // close bottom sheet
         context.push('/user/${member.userId}');
@@ -632,27 +807,46 @@ class _MemberAvatar extends StatelessWidget {
               placeholder: (context, url) => Container(
                 width: size,
                 height: size,
-                color: Colors.grey[200],
-                child: Icon(Icons.person, size: size * 0.6, color: Colors.grey),
+                color: const Color(0xFF333333),
+                child: Icon(Icons.person,
+                    size: size * 0.6, color: Colors.grey[600]),
               ),
               errorWidget: (context, url, error) => Container(
                 width: size,
                 height: size,
-                color: Colors.grey[200],
-                child: Icon(Icons.person, size: size * 0.6, color: Colors.grey),
+                color: const Color(0xFF333333),
+                child: Icon(Icons.person,
+                    size: size * 0.6, color: Colors.grey[600]),
               ),
             )
           : Container(
               width: size,
               height: size,
-              color: Colors.grey[200],
-              child: Icon(Icons.person, size: size * 0.6, color: Colors.grey),
+              color: const Color(0xFF333333),
+              child: Icon(Icons.person,
+                  size: size * 0.6, color: Colors.grey[600]),
             ),
     );
   }
 }
 
-// ── Chat message bubble ─────────────────────────────────────────────────────
+// ── Chat message bubble (dark, with sender colors + image support) ──────────
+
+/// Generate a consistent color for each sender name
+Color _getSenderColor(String name) {
+  final colors = [
+    Colors.tealAccent[400]!,
+    Colors.orangeAccent[200]!,
+    Colors.lightBlueAccent[200]!,
+    Colors.pinkAccent[100]!,
+    Colors.amberAccent[200]!,
+    Colors.purpleAccent[100]!,
+    Colors.cyanAccent[400]!,
+    Colors.lightGreenAccent[200]!,
+  ];
+  final hash = name.codeUnits.fold<int>(0, (prev, c) => prev + c);
+  return colors[hash % colors.length];
+}
 
 class _GroupMessageBubble extends StatelessWidget {
   final String senderName;
@@ -690,7 +884,7 @@ class _GroupMessageBubble extends StatelessWidget {
           // Avatar
           CircleAvatar(
             radius: 16,
-            backgroundColor: AppTheme.surfaceColor,
+            backgroundColor: const Color(0xFF333333),
             backgroundImage: senderImage != null && senderImage!.isNotEmpty
                 ? CachedNetworkImageProvider(senderImage!)
                 : null,
@@ -700,6 +894,7 @@ class _GroupMessageBubble extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
+                      color: Colors.white,
                     ),
                   )
                 : null,
@@ -724,7 +919,7 @@ class _GroupMessageBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * (isMe ? 0.75 : 0.65),
         ),
         decoration: BoxDecoration(
-          color: isMe ? AppTheme.primaryColor : AppTheme.surfaceColor,
+          color: isMe ? _kMyBubbleColor : _kOtherBubbleColor,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -737,13 +932,14 @@ class _GroupMessageBubble extends StatelessWidget {
           children: [
             if (!isMe)
               Padding(
-                padding: EdgeInsets.only(bottom: 4, left: isImage ? 8 : 0, top: isImage ? 4 : 0),
+                padding: EdgeInsets.only(
+                    bottom: 4, left: isImage ? 8 : 0, top: isImage ? 4 : 0),
                 child: Text(
                   senderName,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.primaryDark,
+                    color: _getSenderColor(senderName),
                   ),
                 ),
               ),
@@ -757,13 +953,16 @@ class _GroupMessageBubble extends StatelessWidget {
                     maxWidthDiskCache: 600,
                     placeholder: (context, url) => Container(
                       height: 200,
-                      color: Colors.grey[200],
-                      child: const Center(child: CircularProgressIndicator()),
+                      color: const Color(0xFF2A2A2A),
+                      child: const Center(
+                          child:
+                              CircularProgressIndicator(color: Colors.white)),
                     ),
                     errorWidget: (context, url, error) => Container(
                       height: 200,
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                      color: const Color(0xFF2A2A2A),
+                      child: const Icon(Icons.broken_image,
+                          size: 40, color: Colors.grey),
                     ),
                     fit: BoxFit.cover,
                     width: double.infinity,
@@ -773,26 +972,28 @@ class _GroupMessageBubble extends StatelessWidget {
             if (!isImage)
               Text(
                 message,
-                style: const TextStyle(fontSize: 15),
+                style: const TextStyle(fontSize: 15, color: Colors.white),
               ),
             if (isImage && message.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
                 child: Text(
                   message,
-                  style: const TextStyle(fontSize: 14),
+                  style: const TextStyle(fontSize: 14, color: Colors.white),
                 ),
               ),
             const SizedBox(height: 4),
             Align(
               alignment: Alignment.bottomRight,
               child: Padding(
-                padding: isImage ? const EdgeInsets.only(right: 8, bottom: 4) : EdgeInsets.zero,
+                padding: isImage
+                    ? const EdgeInsets.only(right: 8, bottom: 4)
+                    : EdgeInsets.zero,
                 child: Text(
                   time,
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey[600],
+                    color: Colors.grey[400],
                   ),
                 ),
               ),

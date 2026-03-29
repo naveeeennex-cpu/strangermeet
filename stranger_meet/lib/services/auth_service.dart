@@ -31,6 +31,9 @@ class AuthService {
     String phone = '',
     List<String> interests = const [],
     String role = 'customer',
+    String occupation = '',
+    String collegeName = '',
+    String companyName = '',
   }) async {
     final response = await _api.post('/auth/signup', data: {
       'name': name,
@@ -40,6 +43,9 @@ class AuthService {
       'phone': phone,
       'interests': interests,
       'role': role,
+      'occupation': occupation,
+      'college_name': collegeName,
+      'company_name': companyName,
     });
 
     final token = response.data['access_token'] as String;

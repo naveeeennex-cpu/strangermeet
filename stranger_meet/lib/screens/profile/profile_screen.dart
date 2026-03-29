@@ -7,6 +7,7 @@ import '../../config/theme.dart';
 import '../../models/post.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/friend_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
 
@@ -148,53 +149,80 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        title: const Text(
+        title: Text(
           'Profile',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
+            color: Theme.of(context).textTheme.bodyLarge?.color,
           ),
         ),
         actions: [
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
+            icon: Icon(Icons.more_vert,
+                color: Theme.of(context).textTheme.bodyLarge?.color),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             offset: const Offset(0, 48),
             onSelected: (value) {
               if (value == 'settings') {
                 context.push('/edit-profile');
+              } else if (value == 'dark_mode') {
+                ref.read(themeProvider.notifier).toggleTheme();
               } else if (value == 'logout') {
                 _showLogoutConfirm();
               }
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'settings',
-                child: Row(
-                  children: [
-                    Icon(Icons.settings_outlined, size: 20),
-                    SizedBox(width: 12),
-                    Text('Settings'),
-                  ],
+            itemBuilder: (context) {
+              final isDark = ref.read(themeProvider) == ThemeMode.dark;
+              return [
+                const PopupMenuItem(
+                  value: 'settings',
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings_outlined, size: 20),
+                      SizedBox(width: 12),
+                      Text('Settings'),
+                    ],
+                  ),
                 ),
-              ),
-              const PopupMenuItem(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, size: 20, color: Colors.red),
-                    SizedBox(width: 12),
-                    Text('Log Out', style: TextStyle(color: Colors.red)),
-                  ],
+                PopupMenuItem(
+                  value: 'dark_mode',
+                  child: Row(
+                    children: [
+                      Icon(
+                        isDark ? Icons.dark_mode : Icons.light_mode,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('Dark Mode'),
+                      const Spacer(),
+                      Switch(
+                        value: isDark,
+                        activeColor: AppTheme.primaryColor,
+                        onChanged: (value) {
+                          ref.read(themeProvider.notifier).toggleTheme();
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, size: 20, color: Colors.red),
+                      SizedBox(width: 12),
+                      Text('Log Out', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ];
+            },
           ),
         ],
       ),
@@ -242,7 +270,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         child: Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
+                            border: Border.all(
+                                color: Theme.of(context).scaffoldBackgroundColor,
+                                width: 3),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.15),
@@ -253,7 +283,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                           ),
                           child: CircleAvatar(
                             radius: 45,
-                            backgroundColor: AppTheme.surfaceColor,
+                            backgroundColor: Theme.of(context).colorScheme.surface,
                             backgroundImage: user.profileImageUrl != null &&
                                     user.profileImageUrl!.isNotEmpty
                                 ? CachedNetworkImageProvider(
@@ -265,10 +295,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                     user.name.isNotEmpty
                                         ? user.name[0].toUpperCase()
                                         : '?',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 32,
                                       fontWeight: FontWeight.w700,
-                                      color: AppTheme.textPrimary,
+                                      color: Theme.of(context).textTheme.bodyLarge?.color,
                                     ),
                                   )
                                 : null,
@@ -291,10 +321,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                     children: [
                       Text(
                         user.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
                         ),
                       ),
                       if (user.username != null && user.username!.isNotEmpty) ...[
@@ -303,7 +333,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                           '@${user.username}',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[500],
+                            color: Theme.of(context).textTheme.bodySmall?.color,
                           ),
                         ),
                       ],
@@ -312,7 +342,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         user.email,
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[500],
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                       if (user.bio != null && user.bio!.isNotEmpty) ...[
@@ -324,7 +354,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[600],
+                            color: Theme.of(context).textTheme.bodySmall?.color,
                             height: 1.4,
                           ),
                         ),
@@ -367,9 +397,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         child: OutlinedButton(
                           onPressed: () => context.push('/edit-profile'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
+                            foregroundColor: Theme.of(context).textTheme.bodyLarge?.color,
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            side: const BorderSide(color: Colors.black, width: 1),
+                            side: BorderSide(
+                                color: Theme.of(context).dividerColor, width: 1),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -396,7 +427,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   margin: const EdgeInsets.symmetric(horizontal: 24),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Theme.of(context).cardTheme.color ??
+                        Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -417,13 +449,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         VerticalDivider(
                           width: 1,
                           thickness: 1,
-                          color: Colors.grey[200],
+                          color: Theme.of(context).dividerColor,
                         ),
                         _buildStat(_communityCount, 'Communities'),
                         VerticalDivider(
                           width: 1,
                           thickness: 1,
-                          color: Colors.grey[200],
+                          color: Theme.of(context).dividerColor,
                         ),
                         _buildStat(_postCount, 'Posts'),
                       ],
@@ -440,10 +472,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 delegate: _SliverTabBarDelegate(
                   TabBar(
                     controller: _tabController,
-                    indicatorColor: AppTheme.textPrimary,
+                    indicatorColor: Theme.of(context).textTheme.bodyLarge?.color,
                     indicatorWeight: 2,
-                    labelColor: AppTheme.textPrimary,
-                    unselectedLabelColor: Colors.grey[400],
+                    labelColor: Theme.of(context).textTheme.bodyLarge?.color,
+                    unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color,
                     tabs: const [
                       Tab(icon: Icon(Icons.grid_on)),
                       Tab(icon: Icon(Icons.people_outline)),
@@ -483,10 +515,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         children: [
           Text(
             formatted,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: AppTheme.textPrimary,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
             ),
           ),
           const SizedBox(height: 2),
@@ -494,7 +526,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             label,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey[500],
+              color: Theme.of(context).textTheme.bodySmall?.color,
             ),
           ),
         ],
@@ -512,12 +544,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.camera_alt_outlined, size: 56, color: Colors.grey[300]),
+            Icon(Icons.camera_alt_outlined, size: 56,
+                color: Theme.of(context).textTheme.bodySmall?.color),
             const SizedBox(height: 12),
             Text(
               'No posts yet',
               style: TextStyle(
-                color: Colors.grey[500],
+                color: Theme.of(context).textTheme.bodySmall?.color,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -646,12 +679,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.groups_outlined, size: 56, color: Colors.grey[300]),
+            Icon(Icons.groups_outlined, size: 56,
+                color: Theme.of(context).textTheme.bodySmall?.color),
             const SizedBox(height: 12),
             Text(
               'No communities joined yet',
               style: TextStyle(
-                color: Colors.grey[500],
+                color: Theme.of(context).textTheme.bodySmall?.color,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -700,9 +734,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardTheme.color ??
+                Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: Theme.of(context).dividerColor),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.03),
@@ -775,7 +810,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   '$membersCount members',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[500],
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
                 ),
               ],
@@ -806,7 +841,7 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: Colors.white,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: _tabBar,
     );
   }

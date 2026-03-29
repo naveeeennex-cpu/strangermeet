@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'config/theme.dart';
 import 'config/router.dart';
 import 'config/constants.dart';
+import 'providers/theme_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,15 +15,19 @@ void main() {
   );
 }
 
-class StrangerMeetApp extends StatelessWidget {
+class StrangerMeetApp extends ConsumerWidget {
   const StrangerMeetApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeProvider);
+
     return MaterialApp.router(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
+      themeMode: themeMode,
       theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       routerConfig: router,
     );
   }

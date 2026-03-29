@@ -20,6 +20,9 @@ def _row_to_user_response(row) -> UserResponse:
         profile_image_url=row["profile_image_url"] or None,
         cover_image_url=row.get("cover_image_url") or None,
         role=row.get("role", "customer") or "customer",
+        occupation=row.get("occupation", "") or "",
+        college_name=row.get("college_name", "") or "",
+        company_name=row.get("company_name", "") or "",
         created_at=row["created_at"],
     )
 
@@ -37,6 +40,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         profile_image_url=current_user.get("profile_image_url") or None,
         cover_image_url=current_user.get("cover_image_url") or None,
         role=current_user.get("role", "customer") or "customer",
+        occupation=current_user.get("occupation", "") or "",
+        college_name=current_user.get("college_name", "") or "",
+        company_name=current_user.get("company_name", "") or "",
         created_at=current_user["created_at"],
     )
 
@@ -100,6 +106,9 @@ async def update_me(
             profile_image_url=current_user.get("profile_image_url") or None,
             cover_image_url=current_user.get("cover_image_url") or None,
             role=current_user.get("role", "customer") or "customer",
+            occupation=current_user.get("occupation", "") or "",
+            college_name=current_user.get("college_name", "") or "",
+            company_name=current_user.get("company_name", "") or "",
             created_at=current_user["created_at"],
         )
 

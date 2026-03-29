@@ -8,11 +8,19 @@ const Color kChatBackgroundColor = Color(0xFFECE5DD);
 /// A subtle doodle-pattern painter for chat backgrounds.
 /// Draws very faint icons (chat bubbles, hearts, stars, etc.) in a grid,
 /// similar to WhatsApp's default wallpaper pattern.
+///
+/// Set [isDark] to true for dark-themed chat screens.
 class ChatBackgroundPainter extends CustomPainter {
+  final bool isDark;
+
+  ChatBackgroundPainter({this.isDark = false});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.black.withOpacity(0.03)
+      ..color = isDark
+          ? Colors.white.withOpacity(0.04)
+          : Colors.black.withOpacity(0.03)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
 
@@ -112,5 +120,6 @@ class ChatBackgroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant ChatBackgroundPainter oldDelegate) =>
+      isDark != oldDelegate.isDark;
 }

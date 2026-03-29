@@ -348,6 +348,56 @@ async def get_conversations(
     return conversations
 
 
+@router.put("/{message_id}")
+async def edit_message(
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Edit own message text."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    body = await request.json()
+    new_text = body.get("message", "").strip()
+    if not new_text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message text cannot be empty")
+
+    msg = await pool.fetchrow(
+        "SELECT * FROM messages WHERE id = $1 AND sender_id = $2",
+        message_id, user_id,
+    )
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
+
+    await pool.execute(
+        "UPDATE messages SET message = $1 WHERE id = $2",
+        new_text, message_id,
+    )
+    return {"status": "ok", "message": new_text}
+
+
+@router.delete("/{message_id}")
+async def delete_message(
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete own message for everyone."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    msg = await pool.fetchrow(
+        "SELECT * FROM messages WHERE id = $1 AND sender_id = $2",
+        message_id, user_id,
+    )
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
+
+    await pool.execute("DELETE FROM messages WHERE id = $1", message_id)
+    return {"status": "ok"}
+
+
 @router.websocket("/ws/{token}")
 async def websocket_chat(websocket: WebSocket, token: str):
     from services.auth import decode_access_token

@@ -13,6 +13,7 @@ import '../screens/reels/reels_screen.dart';
 import '../screens/reels/create_reel_screen.dart';
 import '../screens/post/create_post_screen.dart';
 import '../screens/post/post_detail_screen.dart';
+import '../screens/post/video_post_detail_screen.dart';
 import '../screens/chat/conversations_screen.dart';
 import '../screens/chat/chat_screen.dart';
 import '../screens/profile/profile_screen.dart';
@@ -249,6 +250,13 @@ final router = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => PostDetailScreen(
         postId: state.pathParameters['id']!,
+      ),
+    ),
+    GoRoute(
+      path: '/video-post/:postId',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => VideoPostDetailScreen(
+        postId: state.pathParameters['postId']!,
       ),
     ),
     GoRoute(

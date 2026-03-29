@@ -30,17 +30,20 @@ async def signup(user_data: UserSignup, request: Request):
     try:
         row = await pool.fetchrow(
             """
-            INSERT INTO users (name, email, password_hash, phone, interests, role, username)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO users (name, email, password_hash, username, phone, interests, role, bio, occupation, college_name, company_name)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, '', $8, $9, $10)
             RETURNING id, role
             """,
             user_data.name,
             user_data.email,
             hash_password(user_data.password),
+            username,
             user_data.phone,
             user_data.interests,
             user_data.role,
-            username,
+            user_data.occupation,
+            user_data.college_name,
+            user_data.company_name,
         )
     except Exception as e:
         raise HTTPException(

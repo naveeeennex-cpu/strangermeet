@@ -11,6 +11,9 @@ class UserSignup(BaseModel):
     phone: str = ""
     interests: List[str] = []
     role: str = "customer"
+    occupation: str = ""  # "student" or "working" or ""
+    college_name: str = ""
+    company_name: str = ""
 
 
 class UserLogin(BaseModel):
@@ -29,6 +32,9 @@ class UserResponse(BaseModel):
     profile_image_url: Optional[str] = None
     cover_image_url: Optional[str] = None
     role: str = "customer"
+    occupation: Optional[str] = ""
+    college_name: Optional[str] = ""
+    company_name: Optional[str] = ""
     created_at: datetime
 
 

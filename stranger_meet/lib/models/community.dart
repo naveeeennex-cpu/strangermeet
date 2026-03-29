@@ -214,6 +214,30 @@ class CommunityMessage {
       'message_type': messageType,
     };
   }
+
+  CommunityMessage copyWith({
+    String? id,
+    String? communityId,
+    String? userId,
+    String? userName,
+    String? userImage,
+    String? message,
+    DateTime? timestamp,
+    String? imageUrl,
+    String? messageType,
+  }) {
+    return CommunityMessage(
+      id: id ?? this.id,
+      communityId: communityId ?? this.communityId,
+      userId: userId ?? this.userId,
+      userName: userName ?? this.userName,
+      userImage: userImage ?? this.userImage,
+      message: message ?? this.message,
+      timestamp: timestamp ?? this.timestamp,
+      imageUrl: imageUrl ?? this.imageUrl,
+      messageType: messageType ?? this.messageType,
+    );
+  }
 }
 
 class CommunityEvent {

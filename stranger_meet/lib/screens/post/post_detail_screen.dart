@@ -7,6 +7,7 @@ import '../../config/theme.dart';
 import '../../models/post.dart';
 import '../../providers/post_provider.dart';
 import '../../widgets/video_player_widget.dart';
+import '../../widgets/share_bottom_sheet.dart';
 
 class PostDetailScreen extends ConsumerStatefulWidget {
   final String postId;
@@ -520,6 +521,20 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                 ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.share_outlined),
+                                onPressed: () {
+                                  ShareBottomSheet.show(
+                                    context,
+                                    postId: post.id,
+                                    postImageUrl: post.imageUrl,
+                                    postCaption: post.caption,
+                                    postUserName: post.userName,
+                                    mediaType: post.mediaType,
+                                  );
+                                },
                               ),
                             ],
                           ),

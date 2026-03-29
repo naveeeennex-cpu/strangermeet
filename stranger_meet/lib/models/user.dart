@@ -11,6 +11,9 @@ class User {
   final String? profileImageUrl;
   final String? coverImageUrl;
   final String role; // 'customer' or 'partner'
+  final String? occupation; // "student" or "working"
+  final String? collegeName;
+  final String? companyName;
   final DateTime? createdAt;
 
   User({
@@ -24,6 +27,9 @@ class User {
     this.profileImageUrl,
     this.coverImageUrl,
     this.role = 'customer',
+    this.occupation,
+    this.collegeName,
+    this.companyName,
     this.createdAt,
   });
 
@@ -41,6 +47,9 @@ class User {
       profileImageUrl: json['profile_image_url'] ?? json['profileImageUrl'],
       coverImageUrl: json['cover_image_url'] ?? json['coverImageUrl'],
       role: json['role'] ?? 'customer',
+      occupation: json['occupation'],
+      collegeName: json['college_name'] ?? json['collegeName'],
+      companyName: json['company_name'] ?? json['companyName'],
       createdAt: parseUtcToLocal(json['created_at']) ?? parseUtcToLocal(json['createdAt']),
     );
   }
@@ -57,6 +66,9 @@ class User {
       'profile_image_url': profileImageUrl,
       'cover_image_url': coverImageUrl,
       'role': role,
+      'occupation': occupation,
+      'college_name': collegeName,
+      'company_name': companyName,
       'created_at': createdAt?.toIso8601String(),
     };
   }
@@ -72,6 +84,9 @@ class User {
     String? profileImageUrl,
     String? coverImageUrl,
     String? role,
+    String? occupation,
+    String? collegeName,
+    String? companyName,
     DateTime? createdAt,
   }) {
     return User(
@@ -85,6 +100,9 @@ class User {
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,
       role: role ?? this.role,
+      occupation: occupation ?? this.occupation,
+      collegeName: collegeName ?? this.collegeName,
+      companyName: companyName ?? this.companyName,
       createdAt: createdAt ?? this.createdAt,
     );
   }

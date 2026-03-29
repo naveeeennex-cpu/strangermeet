@@ -157,7 +157,8 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget _buildBottomNavBar(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).bottomNavigationBarTheme.backgroundColor ??
+            Theme.of(context).scaffoldBackgroundColor,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -298,9 +299,10 @@ class _NotificationBannerState extends State<_NotificationBanner>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).cardTheme.color ??
+                      Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(color: Theme.of(context).dividerColor),
                 ),
                 child: Row(
                   children: [
@@ -309,7 +311,7 @@ class _NotificationBannerState extends State<_NotificationBanner>
                       radius: 22,
                       backgroundColor: widget.isFriendRequest
                           ? AppTheme.primaryColor.withOpacity(0.2)
-                          : AppTheme.surfaceColor,
+                          : Theme.of(context).colorScheme.surface,
                       backgroundImage: widget.senderImage != null &&
                               widget.senderImage!.isNotEmpty
                           ? CachedNetworkImageProvider(widget.senderImage!)
@@ -335,10 +337,10 @@ class _NotificationBannerState extends State<_NotificationBanner>
                         children: [
                           Text(
                             widget.senderName,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
-                              color: Colors.black87,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -348,7 +350,7 @@ class _NotificationBannerState extends State<_NotificationBanner>
                             widget.message,
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.grey[600],
+                              color: Theme.of(context).textTheme.bodySmall?.color,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -457,6 +459,9 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white;
+    final inactiveColor = Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -469,9 +474,7 @@ class _NavItem extends StatelessWidget {
             Icon(
               isActive ? activeIcon : icon,
               size: 26,
-              color: isActive
-                  ? AppTheme.textPrimary
-                  : AppTheme.textSecondary,
+              color: isActive ? activeColor : inactiveColor,
             ),
             const SizedBox(height: 3),
             Text(
@@ -482,9 +485,7 @@ class _NavItem extends StatelessWidget {
                 fontSize: 10,
                 fontWeight:
                     isActive ? FontWeight.w600 : FontWeight.w400,
-                color: isActive
-                    ? AppTheme.textPrimary
-                    : AppTheme.textSecondary,
+                color: isActive ? activeColor : inactiveColor,
               ),
             ),
           ],
@@ -513,6 +514,9 @@ class _NavItemWithBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white;
+    final inactiveColor = Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -528,9 +532,7 @@ class _NavItemWithBadge extends StatelessWidget {
                 Icon(
                   isActive ? activeIcon : icon,
                   size: 26,
-                  color: isActive
-                      ? AppTheme.textPrimary
-                      : AppTheme.textSecondary,
+                  color: isActive ? activeColor : inactiveColor,
                 ),
                 if (badgeCount > 0)
                   Positioned(
@@ -568,9 +570,7 @@ class _NavItemWithBadge extends StatelessWidget {
                 fontSize: 10,
                 fontWeight:
                     isActive ? FontWeight.w600 : FontWeight.w400,
-                color: isActive
-                    ? AppTheme.textPrimary
-                    : AppTheme.textSecondary,
+                color: isActive ? activeColor : inactiveColor,
               ),
             ),
           ],

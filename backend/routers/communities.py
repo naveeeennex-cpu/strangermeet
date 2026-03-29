@@ -20,7 +20,7 @@ from services.auth import get_current_user
 router = APIRouter(prefix="/api/communities", tags=["communities"])
 
 
-# ── Helper: check membership ────────────────────────────────────────────────
+# ── Helper: check memberships ────────────────────────────────────────────────
 
 async def _get_membership(pool, community_id: str, user_id: str):
     try:
@@ -202,6 +202,43 @@ async def community_count(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user ID format")
 
     return {"count": count or 0}
+
+
+@router.get("/user/{user_id}/joined")
+async def user_joined_communities(
+    user_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get list of communities a user has joined."""
+    pool = request.app.state.pool
+
+    try:
+        rows = await pool.fetch(
+            """SELECT c.id, c.name, c.description, c.image_url, c.category,
+                      c.is_private, c.members_count, c.created_at
+               FROM communities c
+               JOIN community_members cm ON c.id = cm.community_id
+               WHERE cm.user_id = $1 AND cm.status = 'active'
+               ORDER BY cm.joined_at DESC""",
+            user_id
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    return [
+        {
+            "id": str(row["id"]),
+            "name": row["name"],
+            "description": row["description"],
+            "image_url": row["image_url"],
+            "category": row["category"],
+            "is_private": row["is_private"],
+            "members_count": row["members_count"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in rows
+    ]
 
 
 @router.get("/{community_id}", response_model=CommunityResponse)
@@ -707,6 +744,58 @@ async def get_community_messages(
     ]
 
 
+@router.put("/{community_id}/messages/{message_id}")
+async def edit_community_message(
+    community_id: str,
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Edit own community message."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    body = await request.json()
+    new_text = body.get("message", "").strip()
+    if not new_text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message text cannot be empty")
+
+    msg = await pool.fetchrow(
+        "SELECT * FROM community_messages WHERE id = $1 AND community_id = $2 AND user_id = $3",
+        message_id, community_id, user_id,
+    )
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
+
+    await pool.execute(
+        "UPDATE community_messages SET message = $1 WHERE id = $2",
+        new_text, message_id,
+    )
+    return {"status": "ok", "message": new_text}
+
+
+@router.delete("/{community_id}/messages/{message_id}")
+async def delete_community_message(
+    community_id: str,
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete own community message for everyone."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    msg = await pool.fetchrow(
+        "SELECT * FROM community_messages WHERE id = $1 AND community_id = $2 AND user_id = $3",
+        message_id, community_id, user_id,
+    )
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
+
+    await pool.execute("DELETE FROM community_messages WHERE id = $1", message_id)
+    return {"status": "ok"}
+
+
 # ── Sub-groups ───────────────────────────────────────────────────────────────
 
 @router.post("/{community_id}/groups", response_model=SubGroupResponse, status_code=status.HTTP_201_CREATED)
@@ -1035,6 +1124,60 @@ async def get_sub_group_messages(
         )
         for row in rows
     ]
+
+
+@router.put("/{community_id}/groups/{group_id}/messages/{message_id}")
+async def edit_sub_group_message(
+    community_id: str,
+    group_id: str,
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Edit own sub-group message."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    body = await request.json()
+    new_text = body.get("message", "").strip()
+    if not new_text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message text cannot be empty")
+
+    msg = await pool.fetchrow(
+        "SELECT * FROM sub_group_messages WHERE id = $1 AND sub_group_id = $2 AND user_id = $3",
+        message_id, group_id, user_id,
+    )
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
+
+    await pool.execute(
+        "UPDATE sub_group_messages SET message = $1 WHERE id = $2",
+        new_text, message_id,
+    )
+    return {"status": "ok", "message": new_text}
+
+
+@router.delete("/{community_id}/groups/{group_id}/messages/{message_id}")
+async def delete_sub_group_message(
+    community_id: str,
+    group_id: str,
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete own sub-group message for everyone."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    msg = await pool.fetchrow(
+        "SELECT * FROM sub_group_messages WHERE id = $1 AND sub_group_id = $2 AND user_id = $3",
+        message_id, group_id, user_id,
+    )
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
+
+    await pool.execute("DELETE FROM sub_group_messages WHERE id = $1", message_id)
+    return {"status": "ok"}
 
 
 # ── Helper: build event response with trip fields ────────────────────────────

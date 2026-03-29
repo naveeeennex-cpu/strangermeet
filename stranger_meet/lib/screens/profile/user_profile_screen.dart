@@ -23,8 +23,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Map<String, dynamic>? _user;
   List<Post> _posts = [];
+  List<Map<String, dynamic>> _userCommunities = [];
   bool _isLoadingUser = true;
   bool _isLoadingPosts = true;
+  bool _isLoadingCommunities = false;
   String? _errorMessage;
 
   // Friend system
@@ -42,6 +44,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     _fetchUserPosts();
     _fetchFriendshipStatus();
     _fetchCounts();
+    _fetchUserCommunities();
   }
 
   @override
@@ -115,6 +118,23 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     } catch (_) {}
   }
 
+  Future<void> _fetchUserCommunities() async {
+    setState(() => _isLoadingCommunities = true);
+    try {
+      final response = await _api.get('/communities/user/${widget.userId}/joined');
+      final data = response.data;
+      final List<dynamic> results = data is List ? data : (data['results'] ?? data['communities'] ?? []);
+      if (mounted) {
+        setState(() {
+          _userCommunities = results.cast<Map<String, dynamic>>();
+          _isLoadingCommunities = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingCommunities = false);
+    }
+  }
+
   Future<void> _sendFriendRequest() async {
     setState(() => _isSendingRequest = true);
     try {
@@ -167,6 +187,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       _fetchUserPosts(),
       _fetchFriendshipStatus(),
       _fetchCounts(),
+      _fetchUserCommunities(),
     ]);
   }
 
@@ -229,7 +250,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                               unselectedLabelColor: AppTheme.textSecondary,
                               tabs: const [
                                 Tab(icon: Icon(Icons.grid_on)),
-                                Tab(icon: Icon(Icons.view_list)),
+                                Tab(icon: Icon(Icons.people_outline)),
                               ],
                             ),
                           ),
@@ -240,7 +261,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       controller: _tabController,
                       children: [
                         _buildGridTab(),
-                        _buildListTab(),
+                        _buildCommunitiesTab(),
                       ],
                     ),
                   ),
@@ -573,30 +594,153 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
-  Widget _buildListTab() {
-    if (_isLoadingPosts) {
+  Widget _buildCommunitiesTab() {
+    // If not friends, show "Send Request" prompt
+    if (_friendshipStatus != 'friends') {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 56, color: Colors.grey[300]),
+              const SizedBox(height: 16),
+              Text(
+                'Send a friend request to see their communities',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (_friendshipStatus == 'none')
+                ElevatedButton.icon(
+                  onPressed: _isSendingRequest ? null : _sendFriendRequest,
+                  icon: _isSendingRequest
+                      ? const SizedBox(
+                          width: 18, height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                        )
+                      : const Icon(Icons.person_add_outlined, size: 18),
+                  label: Text(_isSendingRequest ? 'Sending...' : 'Send Friend Request'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    elevation: 0,
+                  ),
+                )
+              else if (_friendshipStatus == 'pending_sent')
+                OutlinedButton.icon(
+                  onPressed: null,
+                  icon: const Icon(Icons.hourglass_top, size: 18),
+                  label: const Text('Request Sent'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  ),
+                )
+              else if (_friendshipStatus == 'pending_received')
+                ElevatedButton.icon(
+                  onPressed: _acceptFriendRequest,
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Accept Request'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    elevation: 0,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Friends — show their communities
+    if (_isLoadingCommunities) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_posts.isEmpty) {
+
+    if (_userCommunities.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.camera_alt_outlined, size: 48, color: Colors.grey[400]),
+            Icon(Icons.people_outline, size: 48, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              'No posts yet',
+              'No communities joined yet',
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
           ],
         ),
       );
     }
+
     return ListView.builder(
-      itemCount: _posts.length,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _userCommunities.length,
       itemBuilder: (context, index) {
-        final post = _posts[index];
-        return _UserPostCard(post: post);
+        final community = _userCommunities[index];
+        final name = community['name'] ?? '';
+        final imageUrl = community['image_url'] ?? '';
+        final category = community['category'] ?? '';
+        final membersCount = community['members_count'] ?? 0;
+        final id = community['id']?.toString() ?? '';
+
+        return ListTile(
+          onTap: () => context.push('/community/$id'),
+          leading: CircleAvatar(
+            radius: 24,
+            backgroundColor: AppTheme.surfaceColor,
+            backgroundImage: imageUrl.isNotEmpty
+                ? CachedNetworkImageProvider(imageUrl)
+                : null,
+            child: imageUrl.isEmpty
+                ? Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  )
+                : null,
+          ),
+          title: Text(
+            name,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Row(
+            children: [
+              if (category.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    category,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Icon(Icons.people, size: 14, color: Colors.grey[500]),
+              const SizedBox(width: 4),
+              Text(
+                '$membersCount members',
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              ),
+            ],
+          ),
+          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+        );
       },
     );
   }

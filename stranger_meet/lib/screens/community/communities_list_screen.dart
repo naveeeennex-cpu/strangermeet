@@ -109,7 +109,9 @@ class _CommunitiesListScreenState extends ConsumerState<CommunitiesListScreen> {
                   onSelected: (_) => _onCategorySelected(category),
                   selectedColor: AppTheme.primaryColor,
                   labelStyle: TextStyle(
-                    color: isSelected ? Colors.black : AppTheme.textSecondary,
+                    color: isSelected
+                        ? Colors.black
+                        : Theme.of(context).textTheme.bodySmall?.color,
                     fontWeight:
                         isSelected ? FontWeight.w600 : FontWeight.w400,
                     fontSize: 13,
@@ -140,11 +142,13 @@ class _CommunitiesListScreenState extends ConsumerState<CommunitiesListScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, size: 48, color: AppTheme.textSecondary),
+            Icon(Icons.error_outline, size: 48,
+                color: Theme.of(context).textTheme.bodySmall?.color),
             const SizedBox(height: 12),
             Text(
               'Failed to load communities',
-              style: TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodySmall?.color),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
@@ -163,12 +167,13 @@ class _CommunitiesListScreenState extends ConsumerState<CommunitiesListScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.people_outline,
-                size: 64, color: AppTheme.textSecondary.withOpacity(0.5)),
+                size: 64,
+                color: Theme.of(context).textTheme.bodySmall?.color),
             const SizedBox(height: 12),
             Text(
               'No communities found',
               style: TextStyle(
-                color: AppTheme.textSecondary,
+                color: Theme.of(context).textTheme.bodySmall?.color,
                 fontSize: 16,
               ),
             ),
@@ -215,9 +220,10 @@ class _CommunityCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardTheme.color ??
+              Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.dividerColor, width: 0.5),
+          border: Border.all(color: Theme.of(context).dividerColor, width: 0.5),
         ),
         child: Row(
           children: [
@@ -234,27 +240,28 @@ class _CommunityCard extends StatelessWidget {
                       placeholder: (_, __) => Container(
                         width: 60,
                         height: 60,
-                        color: AppTheme.surfaceColor,
-                        child: const Icon(Icons.people,
-                            color: AppTheme.textSecondary),
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Icon(Icons.people,
+                            color: Theme.of(context).textTheme.bodySmall?.color),
                       ),
                       errorWidget: (_, __, ___) => Container(
                         width: 60,
                         height: 60,
-                        color: AppTheme.surfaceColor,
-                        child: const Icon(Icons.people,
-                            color: AppTheme.textSecondary),
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Icon(Icons.people,
+                            color: Theme.of(context).textTheme.bodySmall?.color),
                       ),
                     )
                   : Container(
                       width: 60,
                       height: 60,
                       decoration: BoxDecoration(
-                        color: AppTheme.surfaceColor,
+                        color: Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.people,
-                          color: AppTheme.textSecondary, size: 28),
+                      child: Icon(Icons.people,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                          size: 28),
                     ),
             ),
 
@@ -289,10 +296,10 @@ class _CommunityCard extends StatelessWidget {
                         ),
                         child: Text(
                           community.category,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
+                            color: Theme.of(context).textTheme.bodyLarge?.color,
                           ),
                         ),
                       ),
@@ -304,13 +311,14 @@ class _CommunityCard extends StatelessWidget {
                   // Member count
                   Row(
                     children: [
-                      Icon(Icons.people_outline, size: 14, color: AppTheme.textSecondary),
+                      Icon(Icons.people_outline, size: 14,
+                          color: Theme.of(context).textTheme.bodySmall?.color),
                       const SizedBox(width: 4),
                       Text(
                         '${community.membersCount} members',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppTheme.textSecondary,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                     ],
@@ -322,9 +330,9 @@ class _CommunityCard extends StatelessWidget {
                   if (community.description.isNotEmpty)
                     Text(
                       community.description,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: AppTheme.textSecondary,
+                        color: Theme.of(context).textTheme.bodySmall?.color,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -341,15 +349,15 @@ class _CommunityCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceColor,
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Joined',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.textSecondary,
+                        color: Theme.of(context).textTheme.bodySmall?.color,
                       ),
                     ),
                   )

@@ -15,6 +15,8 @@ import '../../providers/chat_provider.dart';
 import '../../models/story.dart';
 import '../../services/api_service.dart';
 import '../../widgets/video_player_widget.dart';
+import '../../widgets/auto_play_video_widget.dart';
+import '../../widgets/share_bottom_sheet.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -250,24 +252,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: false,
-        title: const Text(
+        title: Text(
           'StrangerMeet',
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 22,
-            color: AppTheme.textPrimary,
+            color: Theme.of(context).textTheme.bodyLarge?.color,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: AppTheme.textPrimary),
+            icon: Icon(Icons.search,
+                color: Theme.of(context).textTheme.bodyLarge?.color),
             onPressed: () => context.push('/explore'),
           ),
           Stack(
             children: [
               IconButton(
-                icon: const Icon(Icons.notifications_outlined,
-                    color: AppTheme.textPrimary),
+                icon: Icon(Icons.notifications_outlined,
+                    color: Theme.of(context).textTheme.bodyLarge?.color),
                 onPressed: () => context.push('/notifications'),
               ),
               if (pendingCount > 0)
@@ -347,9 +350,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).scaffoldBackgroundColor,
         border: Border(
-          bottom: BorderSide(color: Colors.grey[200]!, width: 0.5),
+          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
         ),
       ),
       child: Row(
@@ -360,19 +363,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             },
             child: Column(
               children: [
-                const Text(
+                Text(
                   'For you',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Container(
                   height: 2.5,
                   width: 50,
-                  color: AppTheme.textPrimary,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
                 ),
               ],
             ),
@@ -389,7 +392,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w400,
-                    color: Colors.grey[500],
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -410,9 +413,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).scaffoldBackgroundColor,
         border: Border(
-          bottom: BorderSide(color: Colors.grey[200]!, width: 0.5),
+          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
         ),
       ),
       child: Row(
@@ -435,8 +438,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ? FontWeight.w700
                           : FontWeight.w400,
                       color: _selectedSubTab == 0
-                          ? AppTheme.textPrimary
-                          : Colors.grey[500],
+                          ? Theme.of(context).textTheme.bodyLarge?.color
+                          : Theme.of(context).textTheme.bodySmall?.color,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -473,8 +476,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ? FontWeight.w700
                           : FontWeight.w400,
                       color: _selectedSubTab == 1
-                          ? AppTheme.textPrimary
-                          : Colors.grey[500],
+                          ? Theme.of(context).textTheme.bodyLarge?.color
+                          : Theme.of(context).textTheme.bodySmall?.color,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -603,7 +606,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         itemBuilder: (context, index) {
           final post = videoPosts[index];
           return GestureDetector(
-            onTap: () => context.push('/post/${post.id}'),
+            onTap: () => context.push('/video-post/${post.id}'),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.grey[200],
@@ -777,9 +780,9 @@ class _StoriesRowState extends ConsumerState<_StoriesRow> {
       height: 110,
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).scaffoldBackgroundColor,
         border: Border(
-          bottom: BorderSide(color: Colors.grey[200]!, width: 0.5),
+          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
         ),
       ),
       child: ListView(
@@ -878,7 +881,7 @@ class _StoryCircle extends StatelessWidget {
                 border: isAddStory
                     ? null
                     : !hasUnviewed
-                        ? Border.all(color: Colors.grey[300]!, width: 2)
+                        ? Border.all(color: Theme.of(context).dividerColor, width: 2)
                         : null,
               ),
               padding:
@@ -889,12 +892,12 @@ class _StoryCircle extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: isAddStory
-                          ? Border.all(color: Colors.grey[300]!, width: 1)
+                          ? Border.all(color: Theme.of(context).dividerColor, width: 1)
                           : null,
                     ),
                     child: CircleAvatar(
                       radius: 28,
-                      backgroundColor: AppTheme.surfaceColor,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
                       backgroundImage:
                           imageUrl != null && imageUrl!.isNotEmpty
                               ? CachedNetworkImageProvider(imageUrl!)
@@ -922,7 +925,9 @@ class _StoryCircle extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: AppTheme.primaryColor,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+                          border: Border.all(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              width: 2),
                         ),
                         child: const Icon(
                           Icons.add,
@@ -942,7 +947,9 @@ class _StoryCircle extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: AppTheme.primaryColor,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+                          border: Border.all(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              width: 2),
                         ),
                         child: const Icon(
                           Icons.groups,
@@ -1015,7 +1022,13 @@ class _PostCardState extends ConsumerState<_PostCard>
       margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0.5),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: InkWell(
-        onTap: () => context.push('/post/${post.id}'),
+        onTap: () {
+          if (post.mediaType == 'video' && post.videoUrl != null) {
+            context.push('/video-post/${post.id}');
+          } else {
+            context.push('/post/${post.id}');
+          }
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1035,7 +1048,7 @@ class _PostCardState extends ConsumerState<_PostCard>
                     },
                     child: CircleAvatar(
                       radius: 20,
-                      backgroundColor: AppTheme.surfaceColor,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
                       backgroundImage: post.userImage != null
                           ? CachedNetworkImageProvider(post.userImage!)
                           : null,
@@ -1044,9 +1057,9 @@ class _PostCardState extends ConsumerState<_PostCard>
                               post.userName.isNotEmpty
                                   ? post.userName[0].toUpperCase()
                                   : '?',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary,
+                                color: Theme.of(context).textTheme.bodyLarge?.color,
                               ),
                             )
                           : null,
@@ -1145,12 +1158,12 @@ class _PostCardState extends ConsumerState<_PostCard>
                                       color: AppTheme.primaryColor,
                                       width: 1.5),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   'Connect',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
-                                    color: AppTheme.textPrimary,
+                                    color: Theme.of(context).textTheme.bodyLarge?.color,
                                   ),
                                 ),
                               ),
@@ -1188,28 +1201,11 @@ class _PostCardState extends ConsumerState<_PostCard>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    VideoPlayerWidget(
+                    AutoPlayVideoWidget(
                       videoUrl: post.videoUrl!,
-                      autoPlay: false,
-                      showControls: true,
-                      aspectRatio: 16 / 9,
-                    ),
-                    // Video icon badge
-                    Positioned(
-                      top: 12,
-                      right: 12,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.videocam,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                      ),
+                      onTap: () {
+                        context.push('/video-post/${post.id}');
+                      },
                     ),
                     // Heart animation overlay
                     AnimatedOpacity(
@@ -1248,12 +1244,12 @@ class _PostCardState extends ConsumerState<_PostCard>
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(
                         height: 300,
-                        color: AppTheme.surfaceColor,
+                        color: Theme.of(context).colorScheme.surface,
                         child: const Center(child: CircularProgressIndicator()),
                       ),
                       errorWidget: (context, url, error) => Container(
                         height: 300,
-                        color: AppTheme.surfaceColor,
+                        color: Theme.of(context).colorScheme.surface,
                         child:
                             const Icon(Icons.broken_image_outlined, size: 48),
                       ),
@@ -1341,7 +1337,13 @@ class _PostCardState extends ConsumerState<_PostCard>
                   const SizedBox(width: 20),
                   // Comment
                   GestureDetector(
-                    onTap: () => context.push('/post/${post.id}'),
+                    onTap: () {
+                      if (post.mediaType == 'video' && post.videoUrl != null) {
+                        context.push('/video-post/${post.id}');
+                      } else {
+                        context.push('/post/${post.id}');
+                      }
+                    },
                     child: Row(
                       children: [
                         Icon(Icons.chat_bubble_outline,
@@ -1361,7 +1363,16 @@ class _PostCardState extends ConsumerState<_PostCard>
                   const Spacer(),
                   // Share
                   GestureDetector(
-                    onTap: () {},
+                    onTap: () {
+                      ShareBottomSheet.show(
+                        context,
+                        postId: post.id,
+                        postImageUrl: post.imageUrl,
+                        postCaption: post.caption,
+                        postUserName: post.userName,
+                        mediaType: post.mediaType,
+                      );
+                    },
                     child: Row(
                       children: [
                         Icon(Icons.share_outlined,
