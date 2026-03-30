@@ -38,7 +38,7 @@ class StoriesNotifier extends StateNotifier<StoriesState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     try {
-      final response = await _api.get('/stories/');
+      final response = await _api.get('/stories');
       final data = response.data;
       final List<dynamic> results = data is List ? data : [];
       final stories =
@@ -55,7 +55,7 @@ class StoriesNotifier extends StateNotifier<StoriesState> {
 
   Future<void> createStory(String imageUrl, String caption) async {
     try {
-      await _api.post('/stories/', data: {
+      await _api.post('/stories', data: {
         'image_url': imageUrl,
         'caption': caption,
       });

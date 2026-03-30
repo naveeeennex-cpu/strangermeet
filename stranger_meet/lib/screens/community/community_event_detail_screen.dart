@@ -218,11 +218,13 @@ class _CommunityEventDetailScreenState
         ],
         bottom: TabBar(
           controller: tabController,
-          labelColor: Colors.white,
+          labelColor: Theme.of(context).brightness == Brightness.dark
+              ? Colors.black
+              : Colors.white,
           unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color,
           indicatorSize: TabBarIndicatorSize.tab,
           indicator: BoxDecoration(
-            color: Theme.of(context).textTheme.bodyLarge?.color,
+            color: AppTheme.primaryColor,
             borderRadius: BorderRadius.circular(10),
           ),
           indicatorPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
@@ -335,6 +337,28 @@ class _TourScheduleTabState extends ConsumerState<_TourScheduleTab> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
       children: [
+        // Clickable community name
+        if (widget.event.communityName != null)
+          GestureDetector(
+            onTap: () => context.push('/community/${widget.communityId}'),
+            child: Row(
+              children: [
+                Icon(Icons.group_outlined, size: 14, color: AppTheme.primaryColor),
+                const SizedBox(width: 6),
+                Text(
+                  widget.event.communityName!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right, size: 16, color: AppTheme.primaryColor),
+              ],
+            ),
+          ),
+        if (widget.event.communityName != null) const SizedBox(height: 8),
         // Trip title header
         Text(
           '${widget.event.durationDays}-Days ${widget.event.title}',
@@ -1185,6 +1209,30 @@ class _OverviewTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        // Clickable community name
+        if (event.communityName != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GestureDetector(
+              onTap: () => context.push('/community/${event.communityId}'),
+              child: Row(
+                children: [
+                  Icon(Icons.group_outlined, size: 14, color: AppTheme.primaryColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    event.communityName!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right, size: 16, color: AppTheme.primaryColor),
+                ],
+              ),
+            ),
+          ),
         // Hero image
         if (event.imageUrl != null && event.imageUrl!.isNotEmpty)
           ClipRRect(

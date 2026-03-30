@@ -176,7 +176,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                   '${community.membersCount} members',
                                   style: const TextStyle(
                                     fontSize: 13,
-                                    color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+                                    color: Colors.grey,
                                   ),
                                 ),
                               ],
@@ -297,7 +297,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                               DateFormat('MMM d, yyyy').format(eventDate),
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+                                color: Colors.grey,
                               ),
                             ),
                           ],
@@ -311,7 +311,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+                                  color: Colors.grey,
                                 ),
                               ),
                               if (price > 0)
@@ -385,7 +385,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                         eventTitle,
                         style: TextStyle(
                           fontSize: 13,
-                          color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+                          color: Colors.grey,
                         ),
                       ),
                       trailing: Column(
@@ -496,7 +496,7 @@ class _SummaryCard extends StatelessWidget {
             title,
             style: TextStyle(
               fontSize: 11,
-              color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+              color: Colors.grey,
               fontWeight: FontWeight.w500,
             ),
           ),

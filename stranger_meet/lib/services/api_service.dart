@@ -3,8 +3,6 @@ import 'package:dio/dio.dart';
 
 import '../config/constants.dart';
 import 'storage_service.dart';
-
-// Conditionally import for mobile SSL fix
 import 'api_service_mobile.dart' if (dart.library.html) 'api_service_web.dart' as platform;
 
 class ApiException implements Exception {
@@ -40,7 +38,9 @@ class ApiService {
     );
 
     // Fix SSL/TLS issues on Android mobile data
-    platform.configureDio(_dio);
+    try {
+      platform.configureDio(_dio);
+    } catch (_) {}
 
     _dio.interceptors.add(
       InterceptorsWrapper(
@@ -60,7 +60,7 @@ class ApiService {
                error.type == DioExceptionType.sendTimeout ||
                error.type == DioExceptionType.receiveTimeout)) {
             try {
-              await Future.delayed(Duration(milliseconds: 500 * (retryCount + 1)));
+              await Future.delayed(Duration(milliseconds: 500 * ((retryCount as int) + 1)));
               error.requestOptions.extra['retryCount'] = retryCount + 1;
               final response = await _dio.fetch(error.requestOptions);
               handler.resolve(response);
@@ -185,4 +185,5 @@ class ApiService {
         return ApiException('An unexpected error occurred.');
     }
   }
+
 }

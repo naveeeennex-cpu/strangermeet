@@ -204,6 +204,40 @@ async def community_count(
     return {"count": count or 0}
 
 
+@router.get("/joined")
+async def my_joined_communities(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get communities the current user has joined."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    rows = await pool.fetch(
+        """SELECT c.id, c.name, c.description, c.image_url, c.category,
+                  c.is_private, c.members_count, c.created_at
+           FROM communities c
+           JOIN community_members cm ON c.id = cm.community_id
+           WHERE cm.user_id = $1 AND cm.status = 'active'
+           ORDER BY cm.joined_at DESC""",
+        user_id
+    )
+
+    return [
+        {
+            "id": str(row["id"]),
+            "name": row["name"],
+            "description": row["description"],
+            "image_url": row["image_url"],
+            "category": row["category"],
+            "is_private": row["is_private"],
+            "members_count": row["members_count"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in rows
+    ]
+
+
 @router.get("/user/{user_id}/joined")
 async def user_joined_communities(
     user_id: str,
@@ -1286,6 +1320,7 @@ async def explore_all_events(
     event_type: str = Query("all"),       # "all", "trip", "event"
     location: str = Query(""),
     difficulty: str = Query(""),
+    include_past: bool = Query(False),    # only show future events by default
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     current_user: dict = Depends(get_current_user),
@@ -1298,6 +1333,10 @@ async def explore_all_events(
     where_parts = []
     params = []
     idx = 1
+
+    # Hide past events by default
+    if not include_past:
+        where_parts.append("(ce.date >= NOW() OR ce.end_date >= NOW())")
 
     if event_type and event_type != "all":
         where_parts.append(f"ce.event_type = ${idx}")
@@ -1393,18 +1432,23 @@ async def create_community_event(
 async def list_community_events(
     community_id: str,
     request: Request,
+    include_past: bool = Query(False),
     current_user: dict = Depends(get_current_user),
 ):
     pool = request.app.state.pool
     user_id = current_user["id"]
 
+    date_filter = "" if include_past else "AND (ce.date >= NOW() OR ce.end_date >= NOW())"
+
     rows = await pool.fetch(
-        """SELECT ce.*, u.name AS creator_name,
+        f"""SELECT ce.*, u.name AS creator_name,
+                  c.name AS community_name, c.image_url AS community_image,
                   EXISTS(SELECT 1 FROM community_event_bookings WHERE event_id = ce.id AND user_id = $2) AS is_booked,
                   (SELECT COUNT(*) FROM community_event_bookings WHERE event_id = ce.id) AS participants_count
            FROM community_events ce
            JOIN users u ON ce.created_by = u.id
-           WHERE ce.community_id = $1
+           JOIN communities c ON ce.community_id = c.id
+           WHERE ce.community_id = $1 {date_filter}
            ORDER BY ce.date ASC""",
         community_id, user_id
     )

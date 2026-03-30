@@ -667,7 +667,7 @@ class _CommunityManageScreenState
           const SizedBox(height: 24),
           const Text(
             'Community Name',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey),
           ),
           const SizedBox(height: 6),
           TextFormField(
@@ -679,7 +679,7 @@ class _CommunityManageScreenState
           const SizedBox(height: 20),
           const Text(
             'Description',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey),
           ),
           const SizedBox(height: 6),
           TextFormField(
