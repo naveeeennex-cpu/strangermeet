@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from typing import List
+from routers.chat import manager as ws_manager
 
 from schemas.community import (
     CommunityCreate, CommunityUpdate, CommunityResponse,
@@ -729,7 +730,7 @@ async def send_community_message(
         community_id, user_id, data.message, data.image_url, data.message_type
     )
 
-    return CommunityMessageResponse(
+    response = CommunityMessageResponse(
         id=str(row["id"]),
         community_id=str(row["community_id"]),
         user_id=str(row["user_id"]),
@@ -740,6 +741,32 @@ async def send_community_message(
         image_url=row.get("image_url") or "",
         message_type=row.get("message_type") or "text",
     )
+
+    # WebSocket fan-out to all community members
+    try:
+        member_rows = await pool.fetch(
+            "SELECT user_id::text FROM community_members WHERE community_id = $1 AND status = 'active'",
+            community_id
+        )
+        member_ids = [r["user_id"] for r in member_rows]
+        ws_payload = {
+            "type": "group_message",
+            "channel": f"community:{community_id}",
+            "id": response.id,
+            "community_id": response.community_id,
+            "user_id": response.user_id,
+            "user_name": response.user_name or "",
+            "user_profile_image": response.user_profile_image or "",
+            "message": response.message,
+            "timestamp": response.timestamp.isoformat(),
+            "image_url": response.image_url,
+            "message_type": response.message_type,
+        }
+        await ws_manager.broadcast_to_group(member_ids, ws_payload, exclude_user_id=user_id)
+    except Exception:
+        pass  # Don't fail the API call if broadcast fails
+
+    return response
 
 
 @router.get("/{community_id}/messages", response_model=List[CommunityMessageResponse])
@@ -1084,6 +1111,37 @@ async def join_sub_group(
     return {"detail": "Joined sub-group"}
 
 
+@router.post("/{community_id}/groups/{group_id}/request-join", status_code=status.HTTP_200_OK)
+async def request_join_sub_group(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    # Must be community member first
+    community_member = await _get_membership(pool, community_id, user_id)
+    if not community_member:
+        raise HTTPException(status_code=403, detail="Join the community first")
+
+    existing = await pool.fetchrow(
+        "SELECT id, status FROM sub_group_members WHERE sub_group_id = $1 AND user_id = $2",
+        group_id, user_id
+    )
+    if existing:
+        if existing["status"] == "pending":
+            return {"detail": "Request already pending"}
+        return {"detail": "Already a member"}
+
+    await pool.execute(
+        "INSERT INTO sub_group_members (sub_group_id, user_id, status) VALUES ($1, $2, 'pending')",
+        group_id, user_id
+    )
+    return {"detail": "Join request sent"}
+
+
 @router.post("/{community_id}/groups/{group_id}/leave", status_code=status.HTTP_200_OK)
 async def leave_sub_group(
     community_id: str,
@@ -1160,36 +1218,40 @@ async def send_sub_group_message(
     pool = request.app.state.pool
     user_id = current_user["id"]
 
-    # Auto-join sub-group if not a member
+    # Check membership
     member = await pool.fetchrow(
-        "SELECT id FROM sub_group_members WHERE sub_group_id = $1 AND user_id = $2",
+        "SELECT id, status FROM sub_group_members WHERE sub_group_id = $1 AND user_id = $2",
         group_id, user_id
     )
+
     if not member:
-        # Also auto-join community if needed
+        # Check if group is private
+        group = await pool.fetchrow("SELECT is_private FROM sub_groups WHERE id = $1", group_id)
+        if group and group.get("is_private"):
+            raise HTTPException(status_code=403, detail="This is a private group. Request to join first.")
+
+        # Public group — must be community member first
         community_member = await _get_membership(pool, community_id, user_id)
         if not community_member:
-            try:
-                await pool.execute(
-                    "INSERT INTO community_members (community_id, user_id, role, status) VALUES ($1, $2, 'member', 'active')",
-                    community_id, user_id
-                )
-            except Exception:
-                pass
+            raise HTTPException(status_code=403, detail="Join the community first before chatting in groups.")
+
+        # Auto-join public sub-group
         try:
             await pool.execute(
-                "INSERT INTO sub_group_members (sub_group_id, user_id) VALUES ($1, $2)",
+                "INSERT INTO sub_group_members (sub_group_id, user_id, status) VALUES ($1, $2, 'active')",
                 group_id, user_id
             )
         except Exception:
             pass
+    elif member.get("status") == "pending":
+        raise HTTPException(status_code=403, detail="Your join request is pending admin approval.")
 
     row = await pool.fetchrow(
         "INSERT INTO sub_group_messages (sub_group_id, user_id, message, image_url, message_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         group_id, user_id, data.message, data.image_url, data.message_type
     )
 
-    return SubGroupMessageResponse(
+    response = SubGroupMessageResponse(
         id=str(row["id"]),
         sub_group_id=str(row["sub_group_id"]),
         user_id=str(row["user_id"]),
@@ -1200,6 +1262,33 @@ async def send_sub_group_message(
         image_url=row.get("image_url") or "",
         message_type=row.get("message_type") or "text",
     )
+
+    # WebSocket fan-out to all sub-group members
+    try:
+        member_rows = await pool.fetch(
+            "SELECT user_id::text FROM sub_group_members WHERE sub_group_id = $1 AND status = 'active'",
+            group_id
+        )
+        member_ids = [r["user_id"] for r in member_rows]
+        ws_payload = {
+            "type": "group_message",
+            "channel": f"subgroup:{group_id}",
+            "id": response.id,
+            "sub_group_id": response.sub_group_id,
+            "community_id": community_id,
+            "user_id": response.user_id,
+            "user_name": response.user_name or "",
+            "user_profile_image": response.user_profile_image or "",
+            "message": response.message,
+            "timestamp": response.timestamp.isoformat(),
+            "image_url": response.image_url,
+            "message_type": response.message_type,
+        }
+        await ws_manager.broadcast_to_group(member_ids, ws_payload, exclude_user_id=user_id)
+    except Exception:
+        pass
+
+    return response
 
 
 @router.get("/{community_id}/groups/{group_id}/messages", response_model=List[SubGroupMessageResponse])

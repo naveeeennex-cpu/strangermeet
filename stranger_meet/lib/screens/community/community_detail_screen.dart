@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../config/theme.dart';
 import '../../providers/community_provider.dart';
 import '../../models/community.dart';
+import '../../services/api_service.dart';
 
 class CommunityDetailScreen extends ConsumerStatefulWidget {
   final String communityId;
@@ -887,11 +888,16 @@ class _PostsTab extends ConsumerWidget {
 
 // ── Groups Tab ────────────────────────────────────────────────────
 
-class _GroupsTab extends ConsumerWidget {
+class _GroupsTab extends ConsumerStatefulWidget {
   final String communityId;
 
   const _GroupsTab({required this.communityId});
 
+  @override
+  ConsumerState<_GroupsTab> createState() => _GroupsTabState();
+}
+
+class _GroupsTabState extends ConsumerState<_GroupsTab> {
   IconData _getTypeIcon(String type) {
     switch (type) {
       case 'gym':
@@ -907,8 +913,86 @@ class _GroupsTab extends ConsumerWidget {
     }
   }
 
+  void _showJoinGroupDialog(BuildContext context, WidgetRef ref, String communityId, SubGroup group) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Join ${group.name}?'),
+        content: Text('You need to join this group before you can chat.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ApiService().post('/communities/$communityId/groups/${group.id}/join');
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Joined ${group.name}!')),
+                  );
+                  // Refresh groups
+                  ref.read(subGroupsProvider(communityId).notifier).fetchGroups();
+                  // Navigate to chat
+                  context.push('/community/$communityId/group/${group.id}');
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString())),
+                  );
+                }
+              }
+            },
+            child: Text('Join'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showJoinRequestDialog(BuildContext context, WidgetRef ref, String communityId, SubGroup group) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Private Group'),
+        content: Text('${group.name} is a private group. Send a join request to the admin?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ApiService().post('/communities/$communityId/groups/${group.id}/request-join');
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Join request sent! Waiting for admin approval.')),
+                  );
+                  ref.read(subGroupsProvider(communityId).notifier).fetchGroups();
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString())),
+                  );
+                }
+              }
+            },
+            child: Text('Send Request'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final communityId = widget.communityId;
     final state = ref.watch(subGroupsProvider(communityId));
     final communityState = ref.watch(communityDetailProvider(communityId));
     final isAdmin = communityState.community?.memberRole == 'admin';
@@ -1016,13 +1100,40 @@ class _GroupsTab extends ConsumerWidget {
                           ],
                         ),
                         trailing: group.isPending
-                            ? Icon(Icons.hourglass_top, size: 20, color: Colors.amber[700])
-                            : const Icon(Icons.chevron_right, color: Colors.grey),
+                            ? Container(
+                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text('Pending', style: TextStyle(fontSize: 12, color: Colors.amber[700], fontWeight: FontWeight.w600)),
+                              )
+                            : group.isMember
+                                ? Icon(Icons.chevron_right, color: Theme.of(context).textTheme.bodySmall?.color)
+                                : group.isPrivate
+                                    ? Icon(Icons.lock_outline, size: 20, color: Colors.orange[400])
+                                    : Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryColor,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text('Join', style: TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.w700)),
+                                      ),
                         onTap: group.isPending
                             ? null
-                            : () => context.push(
-                                '/community/$communityId/group/${group.id}',
-                              ),
+                            : () {
+                                if (group.isMember) {
+                                  // Already a member, go to chat
+                                  context.push('/community/$communityId/group/${group.id}');
+                                } else if (group.isPrivate) {
+                                  // Private group — show "Request to Join" dialog
+                                  _showJoinRequestDialog(context, ref, communityId, group);
+                                } else {
+                                  // Public group — show "Join Group" confirmation
+                                  _showJoinGroupDialog(context, ref, communityId, group);
+                                }
+                              },
                       ),
                     );
                   },

@@ -32,7 +32,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     '/communities',   // 1 - Communities
     '/explore',       // 2 - Explore (CENTER)
     '/conversations', // 3 - Chat
-    '/profile',       // 4 - Profile
+    '/bookings',      // 4 - My Bookings
   ];
 
   @override
@@ -115,8 +115,10 @@ class _MainShellState extends ConsumerState<MainShell> {
           _dismissNotification();
           if (isFriendRequest) {
             context.push('/notifications');
-          } else {
-            context.push('/chat/$senderId');
+          } else if (senderId.isNotEmpty) {
+            context.push(
+              '/chat/$senderId?name=${Uri.encodeComponent(senderName)}',
+            );
           }
         },
         onDismiss: _dismissNotification,
@@ -204,9 +206,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                 },
               ),
               _NavItem(
-                icon: Icons.person_outline,
-                activeIcon: Icons.person,
-                label: 'Profile',
+                icon: Icons.confirmation_number_outlined,
+                activeIcon: Icons.confirmation_number,
+                label: 'Bookings',
                 isActive: _currentIndex == 4,
                 onTap: () => _onTabTapped(4, context),
               ),

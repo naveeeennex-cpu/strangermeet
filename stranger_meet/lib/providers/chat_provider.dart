@@ -189,10 +189,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
         'message_type': messageType,
       });
 
-      // 3. Replace pending with real message
+      // 3. Replace pending with real message (handle WebSocket race condition)
       final realMsg = Message.fromJson(response.data);
-      final updated = state.messages.map((m) => m.id == tempId ? realMsg : m).toList();
-      state = state.copyWith(messages: updated);
+      final alreadyExists = state.messages.any((m) => m.id == realMsg.id);
+      if (alreadyExists) {
+        // WebSocket already delivered this message — just remove the pending one
+        final updated = state.messages.where((m) => m.id != tempId).toList();
+        state = state.copyWith(messages: updated);
+      } else {
+        // Normal case — replace pending with real message
+        final updated = state.messages.map((m) => m.id == tempId ? realMsg : m).toList();
+        state = state.copyWith(messages: updated);
+      }
     } catch (e) {
       // Mark pending message as failed but keep it visible
       state = state.copyWith(errorMessage: e.toString());

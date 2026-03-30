@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import '../../models/community.dart';
 import '../../providers/community_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/websocket_service.dart';
 import '../../widgets/chat_background.dart';
 import '../../widgets/message_actions_sheet.dart';
 
@@ -141,11 +143,21 @@ class SubGroupChatScreen extends ConsumerStatefulWidget {
 class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  final _messageFocusNode = FocusNode();
   String? _currentUserId;
   bool _isUploading = false;
   bool _isAdmin = false;
   List<CommunityMessage> _pinnedMessages = [];
   final Map<String, Map<String, dynamic>> _pollCache = {};
+  Timer? _pollTimer;
+  StreamSubscription? _wsSubscription;
+
+  // @Mentions state
+  bool _showMentionOverlay = false;
+  String _mentionQuery = '';
+
+  // Reply-to-message state
+  CommunityMessage? _replyingTo;
 
   String get _providerKey =>
       '${widget.communityId}:${widget.groupId}';
@@ -165,12 +177,251 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       _fetchPinnedMessages();
       _scrollToBottomInstant();
     });
+
+    // Listen for WebSocket group messages (instant delivery)
+    _wsSubscription = WebSocketService().messageStream.listen((data) {
+      if (!mounted) return;
+      if (data['type'] == 'group_message' &&
+          data['channel'] == 'subgroup:${widget.groupId}') {
+        // New message from another user via WebSocket
+        final msg = CommunityMessage(
+          id: data['id']?.toString() ?? '',
+          communityId: data['community_id']?.toString() ?? '',
+          userId: data['user_id']?.toString() ?? '',
+          userName: data['user_name'] ?? '',
+          userImage: data['user_profile_image'],
+          message: data['message'] ?? '',
+          timestamp: DateTime.tryParse(data['timestamp'] ?? '') ?? DateTime.now(),
+          imageUrl: data['image_url'] ?? '',
+          messageType: data['message_type'] ?? 'text',
+        );
+        final notifier = ref.read(subGroupMessagesProvider(_providerKey).notifier);
+        final currentMessages = ref.read(subGroupMessagesProvider(_providerKey)).messages;
+        // Dedup by ID
+        if (!currentMessages.any((m) => m.id == msg.id)) {
+          notifier.addMessageFromWebSocket(msg);
+          _scrollToBottom();
+        }
+      }
+    });
+
+    // Backup polling every 10 seconds (in case WebSocket misses)
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) {
+        ref.read(subGroupMessagesProvider(_providerKey).notifier).fetchMessages();
+      }
+    });
+
+    // Listen for @ mentions in text input
+    _messageController.addListener(_onMessageTextChanged);
   }
 
   Future<void> _loadCurrentUser() async {
     final userId = await StorageService().getUserId();
     if (mounted) {
       setState(() => _currentUserId = userId);
+    }
+  }
+
+  void _onMessageTextChanged() {
+    final text = _messageController.text;
+    final cursorPos = _messageController.selection.baseOffset;
+    if (cursorPos < 0) return;
+
+    final beforeCursor = text.substring(0, cursorPos);
+    final lastAt = beforeCursor.lastIndexOf('@');
+
+    if (lastAt >= 0) {
+      final queryPart = beforeCursor.substring(lastAt + 1);
+      if (!queryPart.contains(' ')) {
+        setState(() {
+          _showMentionOverlay = true;
+          _mentionQuery = queryPart.toLowerCase();
+        });
+        return;
+      }
+    }
+    setState(() => _showMentionOverlay = false);
+  }
+
+  void _insertMention(String userName) {
+    final text = _messageController.text;
+    final cursorPos = _messageController.selection.baseOffset;
+    final beforeCursor = text.substring(0, cursorPos);
+    final lastAt = beforeCursor.lastIndexOf('@');
+
+    if (lastAt >= 0) {
+      final newText =
+          '${text.substring(0, lastAt)}@$userName ${text.substring(cursorPos)}';
+      _messageController.text = newText;
+      _messageController.selection =
+          TextSelection.collapsed(offset: lastAt + userName.length + 2);
+    }
+    setState(() => _showMentionOverlay = false);
+  }
+
+  Widget _buildMentionOverlay() {
+    if (!_showMentionOverlay) return const SizedBox.shrink();
+
+    final members =
+        ref.read(subGroupMembersProvider(_providerKey)).members;
+    final filtered = members
+        .where(
+            (m) => (m.userName ?? '').toLowerCase().contains(_mentionQuery))
+        .take(5)
+        .toList();
+
+    if (filtered.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 200),
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[700]!),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8)],
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        itemCount: filtered.length,
+        itemBuilder: (context, index) {
+          final member = filtered[index];
+          return ListTile(
+            dense: true,
+            leading: CircleAvatar(
+              radius: 16,
+              backgroundColor: const Color(0xFF333333),
+              backgroundImage: member.userProfileImage != null &&
+                      member.userProfileImage!.isNotEmpty
+                  ? CachedNetworkImageProvider(member.userProfileImage!)
+                  : null,
+              child: member.userProfileImage == null ||
+                      member.userProfileImage!.isEmpty
+                  ? Text(
+                      (member.userName ?? '?')[0].toUpperCase(),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12),
+                    )
+                  : null,
+            ),
+            title: Text(member.userName ?? 'User',
+                style: const TextStyle(color: Colors.white, fontSize: 14)),
+            onTap: () => _insertMention(member.userName ?? 'User'),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMessageText(String text, {bool isMe = true}) {
+    final spans = <TextSpan>[];
+    final mentionRegex = RegExp(r'@(\w+[\w.]*)');
+    int lastEnd = 0;
+
+    for (final match in mentionRegex.allMatches(text)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+      }
+      spans.add(TextSpan(
+        text: match.group(0),
+        style: TextStyle(
+            color: AppTheme.primaryColor, fontWeight: FontWeight.w600),
+      ));
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(color: Colors.white, fontSize: 15),
+        children: spans,
+      ),
+    );
+  }
+
+  Widget _buildReplyPreview() {
+    if (_replyingTo == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        border: Border(
+            top: BorderSide(color: AppTheme.primaryColor, width: 2)),
+      ),
+      child: Row(
+        children: [
+          Container(width: 3, height: 36, color: AppTheme.primaryColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _replyingTo!.userName,
+                  style: TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  _replyingTo!.message,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _replyingTo = null),
+            child: Icon(Icons.close, size: 18, color: Colors.grey[500]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReplyQuote(CommunityMessage message) {
+    try {
+      final replyData = jsonDecode(message.imageUrl);
+      final replyUser = replyData['reply_to_user'] ?? '';
+      final replyText = replyData['reply_to_text'] ?? '';
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+              left: BorderSide(color: AppTheme.primaryColor, width: 3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(replyUser,
+                style: TextStyle(
+                    color: AppTheme.primaryColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(replyText,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          ],
+        ),
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
     }
   }
 
@@ -215,8 +466,12 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
+    _wsSubscription?.cancel();
+    _messageController.removeListener(_onMessageTextChanged);
     _messageController.dispose();
     _scrollController.dispose();
+    _messageFocusNode.dispose();
     super.dispose();
   }
 
@@ -247,11 +502,25 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
     _messageController.clear();
 
     try {
+      String imageUrl = '';
+      String messageType = 'text';
+
+      if (_replyingTo != null) {
+        messageType = 'reply';
+        imageUrl = jsonEncode({
+          'reply_to_id': _replyingTo!.id,
+          'reply_to_user': _replyingTo!.userName,
+          'reply_to_text': _replyingTo!.message.length > 100
+              ? '${_replyingTo!.message.substring(0, 100)}...'
+              : _replyingTo!.message,
+        });
+      }
+
       await ref
           .read(subGroupMessagesProvider(_providerKey).notifier)
-          .sendMessage(text);
+          .sendMessage(text, imageUrl: imageUrl, messageType: messageType);
       if (mounted) {
-        setState(() {});
+        setState(() => _replyingTo = null);
         await Future.delayed(const Duration(milliseconds: 100));
         _scrollToBottom();
       }
@@ -421,6 +690,12 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
+              // Reply
+              ListTile(
+                leading: const Icon(Icons.reply, color: Colors.white70),
+                title: const Text('Reply', style: TextStyle(color: Colors.white)),
+                onTap: () => Navigator.pop(ctx, 'reply'),
+              ),
               // Copy text (for text messages)
               if (isText)
                 ListTile(
@@ -477,6 +752,10 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
     if (action == null || !mounted) return;
 
     switch (action) {
+      case 'reply':
+        setState(() => _replyingTo = message);
+        _messageFocusNode.requestFocus();
+        break;
       case 'edit':
         _showEditDialog(message);
         break;
@@ -1134,6 +1413,26 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
     final membersState =
         ref.watch(subGroupMembersProvider(_providerKey));
 
+    // Auto-scroll to bottom when new messages arrive via polling
+    ref.listen(subGroupMessagesProvider(_providerKey), (prev, next) {
+      if (prev != null && next.messages.length > prev.messages.length) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            final maxScroll = _scrollController.position.maxScrollExtent;
+            final currentScroll = _scrollController.position.pixels;
+            // Only auto-scroll if user was within 100px of bottom
+            if (maxScroll - currentScroll < 100) {
+              _scrollController.animateTo(
+                maxScroll + 100,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+              );
+            }
+          }
+        });
+      }
+    });
+
     return Scaffold(
       backgroundColor: _kChatScaffoldBg,
       appBar: AppBar(
@@ -1234,41 +1533,71 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                                       state.messages[index - 1].timestamp,
                                       message.timestamp,
                                     );
+                                // Determine the actual imageUrl and messageType for display
+                                // For 'reply' type, imageUrl contains reply JSON, not an actual image
+                                final displayImageUrl = message.messageType == 'reply' ? '' : message.imageUrl;
+                                final displayMessageType = message.messageType == 'reply' ? 'text' : message.messageType;
+                                final isReplyMessage = message.messageType == 'reply' &&
+                                    message.imageUrl.isNotEmpty &&
+                                    message.imageUrl.startsWith('{');
+
+                                Widget messageBubbleWidget = message.isDeleted
+                                    ? _buildDeletedMessage(isMe)
+                                    : message.messageType == 'poll'
+                                        ? _buildPollMessageWrapper(message, isMe)
+                                        : message.messageType == 'location'
+                                            ? _buildLocationMessage(message, isMe)
+                                            : Stack(
+                                                children: [
+                                                  _GroupMessageBubble(
+                                                    senderName: message.userName,
+                                                    senderImage: message.userImage,
+                                                    message: message.message,
+                                                    isMe: isMe,
+                                                    time: message.timestamp != null
+                                                        ? DateFormat('hh:mm a')
+                                                            .format(message.timestamp!)
+                                                        : '',
+                                                    imageUrl: displayImageUrl,
+                                                    messageType: displayMessageType,
+                                                    replyWidget: isReplyMessage
+                                                        ? _buildReplyQuote(message)
+                                                        : null,
+                                                    buildMessageText: _buildMessageText,
+                                                  ),
+                                                  if (message.isPinned)
+                                                    Positioned(
+                                                      top: 2,
+                                                      right: isMe ? 4 : null,
+                                                      left: isMe ? null : 36,
+                                                      child: Icon(Icons.push_pin, size: 12, color: AppTheme.primaryColor),
+                                                    ),
+                                                ],
+                                              );
+
                                 return Column(
                                   children: [
                                     if (showDateSeparator && message.timestamp != null)
                                       _DarkDateSeparator(date: message.timestamp!),
-                                    GestureDetector(
-                                      onLongPress: () => _handleMessageLongPress(message),
-                                      child: message.isDeleted
-                                          ? _buildDeletedMessage(isMe)
-                                          : message.messageType == 'poll'
-                                              ? _buildPollMessageWrapper(message, isMe)
-                                              : message.messageType == 'location'
-                                                  ? _buildLocationMessage(message, isMe)
-                                                  : Stack(
-                                                      children: [
-                                                        _GroupMessageBubble(
-                                                          senderName: message.userName,
-                                                          senderImage: message.userImage,
-                                                          message: message.message,
-                                                          isMe: isMe,
-                                                          time: message.timestamp != null
-                                                              ? DateFormat('hh:mm a')
-                                                                  .format(message.timestamp!)
-                                                              : '',
-                                                          imageUrl: message.imageUrl,
-                                                          messageType: message.messageType,
-                                                        ),
-                                                        if (message.isPinned)
-                                                          Positioned(
-                                                            top: 2,
-                                                            right: isMe ? 4 : null,
-                                                            left: isMe ? null : 36,
-                                                            child: Icon(Icons.push_pin, size: 12, color: AppTheme.primaryColor),
-                                                          ),
-                                                      ],
-                                                    ),
+                                    Dismissible(
+                                      key: Key('swipe_${message.id}'),
+                                      direction: DismissDirection.startToEnd,
+                                      confirmDismiss: (direction) async {
+                                        if (!message.isDeleted) {
+                                          setState(() => _replyingTo = message);
+                                          _messageFocusNode.requestFocus();
+                                        }
+                                        return false;
+                                      },
+                                      background: Container(
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.only(left: 20),
+                                        child: Icon(Icons.reply, color: AppTheme.primaryColor),
+                                      ),
+                                      child: GestureDetector(
+                                        onLongPress: () => _handleMessageLongPress(message),
+                                        child: messageBubbleWidget,
+                                      ),
                                     ),
                                   ],
                                 );
@@ -1284,6 +1613,10 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
               padding: EdgeInsets.symmetric(vertical: 4),
               child: LinearProgressIndicator(color: AppTheme.primaryColor),
             ),
+          // Mention overlay
+          _buildMentionOverlay(),
+          // Reply preview
+          _buildReplyPreview(),
           Container(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
             decoration: const BoxDecoration(
@@ -1302,6 +1635,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
+                      focusNode: _messageFocusNode,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Type a message...',
@@ -1841,6 +2175,8 @@ class _GroupMessageBubble extends StatelessWidget {
   final String time;
   final String imageUrl;
   final String messageType;
+  final Widget? replyWidget;
+  final Widget Function(String text, {bool isMe})? buildMessageText;
 
   const _GroupMessageBubble({
     required this.senderName,
@@ -1850,6 +2186,8 @@ class _GroupMessageBubble extends StatelessWidget {
     required this.time,
     this.imageUrl = '',
     this.messageType = 'text',
+    this.replyWidget,
+    this.buildMessageText,
   });
 
   @override
@@ -1897,22 +2235,24 @@ class _GroupMessageBubble extends StatelessWidget {
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: EdgeInsets.only(bottom: addMargin ? 8 : 0),
-        padding: isImage
-            ? const EdgeInsets.all(4)
-            : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * (isMe ? 0.75 : 0.65),
-        ),
-        decoration: BoxDecoration(
-          color: isMe ? _kMyBubbleColor : _kOtherBubbleColor,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 16),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * (isMe ? 0.75 : 0.65),
           ),
-        ),
-        child: Column(
+          child: Container(
+            padding: isImage
+                ? const EdgeInsets.all(4)
+                : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isMe ? _kMyBubbleColor : _kOtherBubbleColor,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(isMe ? 16 : 4),
+                bottomRight: Radius.circular(isMe ? 4 : 16),
+              ),
+            ),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!isMe)
@@ -1928,6 +2268,8 @@ class _GroupMessageBubble extends StatelessWidget {
                   ),
                 ),
               ),
+            // Reply quote (if this is a reply message)
+            if (replyWidget != null) replyWidget!,
             if (isImage)
               GestureDetector(
                 onTap: () => _showFullImage(context, imageUrl),
@@ -1955,17 +2297,21 @@ class _GroupMessageBubble extends StatelessWidget {
                 ),
               ),
             if (!isImage)
-              Text(
-                message,
-                style: const TextStyle(fontSize: 15, color: Colors.white),
-              ),
+              buildMessageText != null
+                  ? buildMessageText!(message, isMe: isMe)
+                  : Text(
+                      message,
+                      style: const TextStyle(fontSize: 15, color: Colors.white),
+                    ),
             if (isImage && message.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                child: Text(
-                  message,
-                  style: const TextStyle(fontSize: 14, color: Colors.white),
-                ),
+                child: buildMessageText != null
+                    ? buildMessageText!(message, isMe: isMe)
+                    : Text(
+                        message,
+                        style: const TextStyle(fontSize: 14, color: Colors.white),
+                      ),
               ),
             const SizedBox(height: 4),
             Align(
@@ -1983,7 +2329,9 @@ class _GroupMessageBubble extends StatelessWidget {
                 ),
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

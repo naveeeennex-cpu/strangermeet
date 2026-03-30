@@ -72,20 +72,12 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   final _searchController = TextEditingController();
   String _selectedType = 'All';
   String _selectedLocation = 'All';
+  String _selectedDifficulty = 'All';
+  String _selectedPrice = 'All';
+  String _sortBy = 'date'; // date, price_low, price_high, nearest
+  int _activeFilterCount = 0;
 
   static const _typeFilters = ['All', 'Trips', 'Events'];
-  static const _locations = [
-    'All',
-    'Nearby',
-    'Manali',
-    'Lonavala',
-    'Mumbai',
-    'Delhi',
-    'Bangalore',
-    'Goa',
-    'Uttarakhand',
-    'McLeodganj',
-  ];
 
   String? _userCity;
 
@@ -191,10 +183,213 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       location = _selectedLocation;
     }
 
+    // Count active filters
+    int count = 0;
+    if (_selectedType != 'All') count++;
+    if (_selectedLocation != 'All') count++;
+    if (_selectedDifficulty != 'All') count++;
+    if (_selectedPrice != 'All') count++;
+    if (_sortBy != 'date') count++;
+    setState(() => _activeFilterCount = count);
+
     ref.read(exploreProvider.notifier).fetchEvents(
           eventType: eventType,
           location: location,
+          difficulty: _selectedDifficulty == 'All' ? '' : _selectedDifficulty.toLowerCase(),
         );
+  }
+
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final theme = Theme.of(ctx);
+            return DraggableScrollableSheet(
+              initialChildSize: 0.7,
+              minChildSize: 0.5,
+              maxChildSize: 0.9,
+              expand: false,
+              builder: (ctx, scrollController) {
+                return Column(
+                  children: [
+                    // Handle
+                    Container(
+                      width: 40, height: 4,
+                      margin: const EdgeInsets.only(top: 12, bottom: 8),
+                      decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2)),
+                    ),
+                    // Title row
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      child: Row(
+                        children: [
+                          const Text('Filters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () {
+                              setSheetState(() {
+                                _selectedType = 'All';
+                                _selectedLocation = 'All';
+                                _selectedDifficulty = 'All';
+                                _selectedPrice = 'All';
+                                _sortBy = 'date';
+                              });
+                            },
+                            child: Text('Reset', style: TextStyle(color: Colors.red[400])),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          // Sort By
+                          _filterSectionTitle('Sort by', theme),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8, runSpacing: 8,
+                            children: [
+                              _filterChip('Soonest', _sortBy == 'date', () => setSheetState(() => _sortBy = 'date'), theme),
+                              _filterChip('Price: Low→High', _sortBy == 'price_low', () => setSheetState(() => _sortBy = 'price_low'), theme),
+                              _filterChip('Price: High→Low', _sortBy == 'price_high', () => setSheetState(() => _sortBy = 'price_high'), theme),
+                              if (_userCity != null)
+                                _filterChip('Nearest', _sortBy == 'nearest', () => setSheetState(() => _sortBy = 'nearest'), theme),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Type
+                          _filterSectionTitle('Type', theme),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8, runSpacing: 8,
+                            children: _typeFilters.map((t) =>
+                              _filterChip(t, _selectedType == t, () => setSheetState(() => _selectedType = t), theme),
+                            ).toList(),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Location
+                          _filterSectionTitle('Location', theme),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8, runSpacing: 8,
+                            children: [
+                              _filterChip('All', _selectedLocation == 'All', () => setSheetState(() => _selectedLocation = 'All'), theme),
+                              if (_userCity != null)
+                                _filterChip('Nearby ($_userCity)', _selectedLocation == 'Nearby', () => setSheetState(() => _selectedLocation = 'Nearby'), theme),
+                              ...['Chennai', 'Mumbai', 'Bangalore', 'Delhi', 'Goa', 'Manali', 'Kodaikanal', 'Pondicherry']
+                                  .map((l) => _filterChip(l, _selectedLocation == l, () => setSheetState(() => _selectedLocation = l), theme)),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Price
+                          _filterSectionTitle('Price', theme),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8, runSpacing: 8,
+                            children: [
+                              _filterChip('All', _selectedPrice == 'All', () => setSheetState(() => _selectedPrice = 'All'), theme),
+                              _filterChip('Free', _selectedPrice == 'Free', () => setSheetState(() => _selectedPrice = 'Free'), theme),
+                              _filterChip('Under \u20B91000', _selectedPrice == 'under1000', () => setSheetState(() => _selectedPrice = 'under1000'), theme),
+                              _filterChip('\u20B91000-5000', _selectedPrice == '1000to5000', () => setSheetState(() => _selectedPrice = '1000to5000'), theme),
+                              _filterChip('\u20B95000+', _selectedPrice == 'above5000', () => setSheetState(() => _selectedPrice = 'above5000'), theme),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Difficulty
+                          _filterSectionTitle('Difficulty', theme),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8, runSpacing: 8,
+                            children: ['All', 'Easy', 'Moderate', 'Hard'].map((d) =>
+                              _filterChip(d, _selectedDifficulty == d, () => setSheetState(() => _selectedDifficulty = d), theme),
+                            ).toList(),
+                          ),
+
+                          const SizedBox(height: 30),
+                        ],
+                      ),
+                    ),
+                    // Apply button
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                      child: SafeArea(
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              setState(() {}); // Update parent
+                              _applyFilters();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: AppTheme.primaryColor,
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('Apply Filters', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _filterSectionTitle(String title, ThemeData theme) {
+    return Text(
+      title,
+      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: theme.textTheme.bodyLarge?.color),
+    );
+  }
+
+  Widget _filterChip(String label, bool isSelected, VoidCallback onTap, ThemeData theme) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryColor : theme.dividerColor,
+            width: 1.2,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? Colors.black : theme.textTheme.bodySmall?.color,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -203,16 +398,41 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final user = ref.watch(currentUserProvider);
     final firstName = (user?.name ?? 'Explorer').split(' ').first;
 
-    // Filter by search text locally
+    // Filter by search text + price locally
     final searchQuery = _searchController.text.trim().toLowerCase();
-    final filteredEvents = searchQuery.isEmpty
-        ? state.events
-        : state.events
-            .where((e) =>
-                e.title.toLowerCase().contains(searchQuery) ||
-                e.location.toLowerCase().contains(searchQuery) ||
-                (e.communityName ?? '').toLowerCase().contains(searchQuery))
-            .toList();
+    var filteredEvents = state.events.where((e) {
+      // Search filter
+      if (searchQuery.isNotEmpty) {
+        final matches = e.title.toLowerCase().contains(searchQuery) ||
+            e.location.toLowerCase().contains(searchQuery) ||
+            (e.communityName ?? '').toLowerCase().contains(searchQuery);
+        if (!matches) return false;
+      }
+      // Price filter
+      if (_selectedPrice == 'Free' && e.price > 0) return false;
+      if (_selectedPrice == 'under1000' && (e.price <= 0 || e.price > 1000)) return false;
+      if (_selectedPrice == '1000to5000' && (e.price < 1000 || e.price > 5000)) return false;
+      if (_selectedPrice == 'above5000' && e.price < 5000) return false;
+      return true;
+    }).toList();
+
+    // Sort
+    if (_sortBy == 'price_low') {
+      filteredEvents.sort((a, b) => a.price.compareTo(b.price));
+    } else if (_sortBy == 'price_high') {
+      filteredEvents.sort((a, b) => b.price.compareTo(a.price));
+    } else if (_sortBy == 'nearest' && _userCity != null) {
+      // Put events in user's city first
+      final city = _userCity!.toLowerCase();
+      filteredEvents.sort((a, b) {
+        final aMatch = a.location.toLowerCase().contains(city) ? 0 : 1;
+        final bMatch = b.location.toLowerCase().contains(city) ? 0 : 1;
+        return aMatch.compareTo(bMatch);
+      });
+    } else {
+      // Default: sort by date (soonest first)
+      filteredEvents.sort((a, b) => a.date.compareTo(b.date));
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -302,20 +522,17 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                 ),
               ),
 
-              // ── Type Filters (Segmented Control) ──
+              // ── Filter Bar ──
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: Row(
-                      children: _typeFilters.map((f) {
+                  child: Row(
+                    children: [
+                      // Type chips (compact)
+                      ..._typeFilters.map((f) {
                         final isSelected = _selectedType == f;
-                        return Expanded(
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
                           child: GestureDetector(
                             onTap: () {
                               setState(() => _selectedType = f);
@@ -323,139 +540,85 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                             },
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Theme.of(context).cardTheme.color ??
-                                        Theme.of(context).scaffoldBackgroundColor
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: isSelected
-                                    ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))]
-                                    : [],
-                              ),
-                              child: Center(
-                                child: Text(
-                                  f,
-                                  style: TextStyle(
-                                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                    fontSize: 14,
-                                    color: isSelected
-                                        ? Theme.of(context).textTheme.bodyLarge?.color
-                                        : Theme.of(context).textTheme.bodySmall?.color,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ),
-
-              // ── Location Filters (Scrollable pills with icons) ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 14, 0, 16),
-                  child: SizedBox(
-                    height: 40,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _locations.length + 1, // +1 for filter icon button
-                      itemBuilder: (context, index) {
-                        // Filter icon at the end
-                        if (index == _locations.length) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 3),
-                            child: GestureDetector(
-                              onTap: () {
-                                // Reset filters
-                                setState(() {
-                                  _selectedType = 'All';
-                                  _selectedLocation = 'All';
-                                  _searchController.clear();
-                                });
-                                _applyFilters();
-                              },
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).cardTheme.color ??
-                                      Theme.of(context).colorScheme.surface,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Theme.of(context).dividerColor),
-                                ),
-                                child: Icon(Icons.tune, size: 18,
-                                    color: Theme.of(context).textTheme.bodySmall?.color),
-                              ),
-                            ),
-                          );
-                        }
-
-                        final loc = _locations[index];
-                        final isSelected = _selectedLocation == loc;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() => _selectedLocation = loc);
-                              _applyFilters();
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppTheme.primaryColor
-                                    : Theme.of(context).cardTheme.color ??
-                                        Theme.of(context).colorScheme.surface,
+                                color: isSelected ? AppTheme.primaryColor : Colors.transparent,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isSelected
-                                      ? AppTheme.primaryColor
-                                      : Theme.of(context).dividerColor,
+                                  color: isSelected ? AppTheme.primaryColor : Theme.of(context).dividerColor,
                                 ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (loc != 'All')
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 4),
-                                      child: Icon(
-                                        loc == 'Nearby' ? Icons.my_location : Icons.location_on,
-                                        size: 14,
-                                        color: isSelected
-                                            ? Colors.black87
-                                            : Theme.of(context).textTheme.bodySmall?.color,
-                                      ),
-                                    ),
-                                  Text(
-                                    loc == 'Nearby' && _userCity != null
-                                        ? 'Nearby ($_userCity)'
-                                        : loc,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                      color: isSelected
-                                          ? Colors.black87
-                                          : Theme.of(context).textTheme.bodySmall?.color,
-                                    ),
-                                  ),
-                                ],
+                              child: Text(
+                                f,
+                                style: TextStyle(
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  fontSize: 13,
+                                  color: isSelected ? Colors.black : Theme.of(context).textTheme.bodySmall?.color,
+                                ),
                               ),
                             ),
                           ),
                         );
-                      },
-                    ),
+                      }),
+                      const Spacer(),
+                      // Filter button
+                      GestureDetector(
+                        onTap: _showFilterSheet,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _activeFilterCount > 0
+                                ? AppTheme.primaryColor.withOpacity(0.15)
+                                : Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _activeFilterCount > 0
+                                  ? AppTheme.primaryColor
+                                  : Theme.of(context).dividerColor,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tune, size: 16,
+                                  color: _activeFilterCount > 0
+                                      ? AppTheme.primaryColor
+                                      : Theme.of(context).textTheme.bodySmall?.color),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Filter',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _activeFilterCount > 0
+                                      ? AppTheme.primaryColor
+                                      : Theme.of(context).textTheme.bodySmall?.color,
+                                ),
+                              ),
+                              if (_activeFilterCount > 0) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.primaryColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    '$_activeFilterCount',
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.black),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
               // ── Content ──
               if (state.isLoading)

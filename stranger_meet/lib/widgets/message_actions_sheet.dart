@@ -31,6 +31,15 @@ class MessageActionsSheet {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
+              // Reply
+              ListTile(
+                leading: const Icon(Icons.reply, color: Colors.white70),
+                title: const Text(
+                  'Reply',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () => Navigator.pop(ctx, 'reply'),
+              ),
               // Edit (own text messages only)
               if (isOwnMessage && isTextMessage)
                 ListTile(

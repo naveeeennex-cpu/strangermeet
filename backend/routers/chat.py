@@ -50,6 +50,17 @@ class ConnectionManager:
     def is_online(self, user_id: str) -> bool:
         return user_id in self.active_connections
 
+    async def broadcast_to_group(self, member_user_ids: list, message: dict, exclude_user_id: str = None):
+        """Fan-out: send message to all group members who are online."""
+        for uid in member_user_ids:
+            if uid != exclude_user_id:
+                ws = self.active_connections.get(uid)
+                if ws:
+                    try:
+                        await ws.send_json(message)
+                    except Exception:
+                        self.active_connections.pop(uid, None)
+
 
 manager = ConnectionManager()
 

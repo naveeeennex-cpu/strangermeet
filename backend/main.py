@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import create_pool, close_pool, get_db, seed_demo_data
-from routers import auth, users, posts, events, chat, stories, friends, communities, reels, admin, upload
+from routers import auth, users, posts, events, chat, stories, friends, communities, reels, admin, upload, bookings
 
 
 @asynccontextmanager
@@ -44,6 +44,7 @@ app.include_router(communities.router)
 app.include_router(reels.router)
 app.include_router(admin.router)
 app.include_router(upload.router)
+app.include_router(bookings.router)
 
 
 @app.get("/")

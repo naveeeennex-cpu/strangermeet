@@ -338,6 +338,7 @@ async def init_db():
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 sub_group_id UUID REFERENCES sub_groups(id) ON DELETE CASCADE,
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                status VARCHAR(20) DEFAULT 'active',
                 joined_at TIMESTAMP DEFAULT NOW(),
                 UNIQUE(sub_group_id, user_id)
             );

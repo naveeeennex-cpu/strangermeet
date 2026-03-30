@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
 
 import '../../config/theme.dart';
 import '../../models/user.dart';
@@ -359,12 +361,95 @@ class _CommunityManageScreenState
                       ],
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: imageUrlCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Image URL (optional)',
-                        prefixIcon: Icon(Icons.image_outlined),
-                      ),
+                    // Image upload
+                    StatefulBuilder(
+                      builder: (ctx2, setImageState) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (imageUrlCtrl.text.isNotEmpty)
+                              Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      imageUrlCtrl.text,
+                                      height: 120,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        height: 120,
+                                        color: Theme.of(ctx2).colorScheme.surface,
+                                        child: const Center(child: Icon(Icons.broken_image)),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 4, right: 4,
+                                    child: GestureDetector(
+                                      onTap: () => setImageState(() => imageUrlCtrl.clear()),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black54,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              GestureDetector(
+                                onTap: () async {
+                                  try {
+                                    final picked = await ImagePicker().pickImage(
+                                      source: ImageSource.gallery,
+                                      maxWidth: 1200,
+                                    );
+                                    if (picked == null) return;
+                                    setImageState(() {}); // show loading
+                                    final formData = FormData.fromMap({
+                                      'file': await MultipartFile.fromFile(picked.path),
+                                      'folder': 'events',
+                                    });
+                                    final resp = await ApiService().uploadFile('/upload/image', formData: formData);
+                                    final url = resp.data['url']?.toString() ?? '';
+                                    if (url.isNotEmpty) {
+                                      setImageState(() => imageUrlCtrl.text = url);
+                                    }
+                                  } catch (e) {
+                                    if (ctx2.mounted) {
+                                      ScaffoldMessenger.of(ctx2).showSnackBar(
+                                        SnackBar(content: Text('Upload failed: $e')),
+                                      );
+                                    }
+                                  }
+                                },
+                                child: Container(
+                                  height: 100,
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(ctx2).colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Theme.of(ctx2).dividerColor),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.add_photo_alternate_outlined,
+                                          size: 32, color: Theme.of(ctx2).textTheme.bodySmall?.color),
+                                      const SizedBox(height: 4),
+                                      Text('Add Cover Image',
+                                          style: TextStyle(fontSize: 12, color: Theme.of(ctx2).textTheme.bodySmall?.color)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 20),
                     SizedBox(
@@ -744,7 +829,11 @@ class _CommunityManageScreenState
         } else if (index == 3) {
           return FloatingActionButton(
             backgroundColor: AppTheme.primaryColor,
-            onPressed: () => _showCreateEventSheet(),
+            onPressed: () {
+              context.push(
+                '/partner/community/${widget.communityId}/create-trip?type=trip',
+              ).then((_) => _loadAdminEvents());
+            },
             child: const Icon(Icons.add, color: Colors.black),
           );
         }
@@ -1491,9 +1580,13 @@ class _CommunityManageScreenState
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ElevatedButton.icon(
-                  onPressed: () => _showCreateEventSheet(),
+                  onPressed: () {
+                    context.push(
+                      '/partner/community/${widget.communityId}/create-trip?type=trip',
+                    ).then((_) => _loadAdminEvents());
+                  },
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Create Event'),
+                  label: const Text('Create Trip/Event'),
                 ),
               ],
             ),
@@ -1686,7 +1779,13 @@ class _CommunityManageScreenState
                       PopupMenuButton<String>(
                         onSelected: (value) {
                           if (value == 'edit') {
-                            _showCreateEventSheet(existing: event);
+                            if (isTrip) {
+                              context.push(
+                                '/partner/community/${widget.communityId}/edit-trip/$eventId?type=$eventType',
+                              ).then((_) => _loadAdminEvents());
+                            } else {
+                              _showCreateEventSheet(existing: event);
+                            }
                           } else if (value == 'delete') {
                             _showDeleteEventDialog(eventId, title);
                           } else if (value == 'enrollments') {

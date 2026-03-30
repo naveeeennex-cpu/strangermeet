@@ -442,9 +442,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildStat(
-                          friendState.friends.length,
-                          'Friends',
+                        GestureDetector(
+                          onTap: () => _showFriendsList(context, friendState.friends),
+                          child: _buildStat(
+                            friendState.friends.length,
+                            'Friends',
+                          ),
                         ),
                         VerticalDivider(
                           width: 1,
@@ -496,6 +499,114 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ),
         ),
       ),
+    );
+  }
+
+  void _showFriendsList(BuildContext context, List<dynamic> friends) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (ctx, scrollController) {
+            return Column(
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    'Friends (${friends.length})',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: friends.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.people_outline, size: 48, color: Colors.grey[400]),
+                              const SizedBox(height: 8),
+                              Text('No friends yet', style: TextStyle(color: Colors.grey[500])),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: scrollController,
+                          itemCount: friends.length,
+                          itemBuilder: (ctx, index) {
+                            final friend = friends[index];
+                            final name = friend.name ?? friend.toString();
+                            final image = friend.profileImageUrl;
+                            final userId = friend.id;
+
+                            return ListTile(
+                              leading: CircleAvatar(
+                                radius: 22,
+                                backgroundColor: Theme.of(context).colorScheme.surface,
+                                backgroundImage: image != null && image.isNotEmpty
+                                    ? CachedNetworkImageProvider(image)
+                                    : null,
+                                child: image == null || image.isEmpty
+                                    ? Text(
+                                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                        style: const TextStyle(fontWeight: FontWeight.w700),
+                                      )
+                                    : null,
+                              ),
+                              title: Text(
+                                name,
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: friend.username != null
+                                  ? Text('@${friend.username}',
+                                      style: TextStyle(fontSize: 13, color: Colors.grey[500]))
+                                  : null,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.chat_bubble_outline, size: 20),
+                                    onPressed: () {
+                                      Navigator.pop(ctx);
+                                      context.push('/chat/$userId?name=${Uri.encodeComponent(name)}');
+                                    },
+                                  ),
+                                  const Icon(Icons.chevron_right, size: 20),
+                                ],
+                              ),
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                context.push('/user/$userId');
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

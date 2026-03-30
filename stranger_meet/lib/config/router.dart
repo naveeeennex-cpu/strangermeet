@@ -19,6 +19,7 @@ import '../screens/chat/chat_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/profile/user_profile_screen.dart';
+import '../screens/bookings/my_bookings_screen.dart';
 import '../screens/profile/friend_requests_screen.dart';
 import '../screens/home/story_viewer_screen.dart';
 import '../screens/community/communities_list_screen.dart';
@@ -37,6 +38,7 @@ import '../screens/partner/analytics_screen.dart';
 import '../screens/partner/payments_screen.dart';
 import '../screens/partner/event_enrollments_screen.dart';
 import '../screens/partner/trip_manage_screen.dart';
+import '../screens/partner/create_trip_screen.dart';
 import '../screens/events/event_detail_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -101,12 +103,19 @@ final router = GoRouter(
           ),
         ),
         GoRoute(
-          path: '/profile',
+          path: '/bookings',
           pageBuilder: (context, state) => const NoTransitionPage(
-            child: ProfileScreen(),
+            child: MyBookingsScreen(),
           ),
         ),
       ],
+    ),
+
+    // Profile (standalone — accessible from avatar tap)
+    GoRoute(
+      path: '/profile',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const ProfileScreen(),
     ),
 
     // Partner ShellRoute
@@ -243,6 +252,23 @@ final router = GoRouter(
       builder: (context, state) => TripManageScreen(
         communityId: state.pathParameters['cid']!,
         eventId: state.pathParameters['eid']!,
+      ),
+    ),
+    GoRoute(
+      path: '/partner/community/:cid/create-trip',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => CreateTripScreen(
+        communityId: state.pathParameters['cid']!,
+        eventType: state.uri.queryParameters['type'] ?? 'trip',
+      ),
+    ),
+    GoRoute(
+      path: '/partner/community/:cid/edit-trip/:eid',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => CreateTripScreen(
+        communityId: state.pathParameters['cid']!,
+        eventId: state.pathParameters['eid'],
+        eventType: state.uri.queryParameters['type'] ?? 'trip',
       ),
     ),
     GoRoute(

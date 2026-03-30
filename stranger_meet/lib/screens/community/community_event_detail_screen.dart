@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
 import '../../models/community.dart';
@@ -996,26 +998,78 @@ class _BookingDetailsTab extends StatelessWidget {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade100),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.pin_drop, color: Colors.blue[700], size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    event.meetingPoint,
-                    style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodyLarge?.color),
-                  ),
+          Builder(builder: (context) {
+            final mp = event.meetingPoint;
+            final hasUrl = mp.contains('|');
+            final mpTitle = hasUrl ? mp.split('|')[0].trim() : mp;
+            final mpUrl = hasUrl && mp.split('|').length > 1 ? mp.split('|')[1].trim() : '';
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+
+            return GestureDetector(
+              onTap: mpUrl.isNotEmpty
+                  ? () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Opening: $mpUrl'),
+                          action: SnackBarAction(
+                            label: 'COPY',
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: mpUrl));
+                            },
+                          ),
+                        ),
+                      );
+                      // Try to open URL
+                      try {
+                        launchUrl(Uri.parse(mpUrl), mode: LaunchMode.externalApplication);
+                      } catch (_) {}
+                    }
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.blue.withOpacity(0.12) : Colors.blue[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isDark ? Colors.blue.withOpacity(0.3) : Colors.blue.shade100),
                 ),
-              ],
-            ),
-          ),
+                child: Row(
+                  children: [
+                    Icon(Icons.pin_drop, color: Colors.blue[700], size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            mpTitle,
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodyLarge?.color),
+                          ),
+                          if (mpUrl.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(Icons.open_in_new, size: 13, color: Colors.blue[400]),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Open in Google Maps',
+                                    style: TextStyle(fontSize: 12, color: Colors.blue[400], fontWeight: FontWeight.w500),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (mpUrl.isNotEmpty)
+                      Icon(Icons.navigation_outlined, color: Colors.blue[400], size: 22),
+                  ],
+                ),
+              ),
+            );
+          }),
         ],
 
         // Trip details grid
@@ -1259,43 +1313,70 @@ class _OverviewTab extends StatelessWidget {
           style: TextStyle(fontSize: 14.5, color: Theme.of(context).textTheme.bodyLarge?.color, height: 1.6),
         ),
 
-        // Meeting point
+        // Meeting point (with Google Maps link)
         if (event.meetingPoint.isNotEmpty) ...[
           const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade100),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.pin_drop, color: Colors.blue[700], size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Meeting Point',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: Colors.blue[800],
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        event.meetingPoint,
-                        style: TextStyle(fontSize: 13.5, color: Theme.of(context).textTheme.bodyLarge?.color),
-                      ),
-                    ],
-                  ),
+          Builder(builder: (context) {
+            final mp = event.meetingPoint;
+            final hasUrl = mp.contains('|');
+            final mpTitle = hasUrl ? mp.split('|')[0].trim() : mp;
+            final mpUrl = hasUrl && mp.split('|').length > 1 ? mp.split('|')[1].trim() : '';
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+
+            return GestureDetector(
+              onTap: mpUrl.isNotEmpty
+                  ? () {
+                      try {
+                        launchUrl(Uri.parse(mpUrl), mode: LaunchMode.externalApplication);
+                      } catch (_) {
+                        Clipboard.setData(ClipboardData(text: mpUrl));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Link copied!')),
+                        );
+                      }
+                    }
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.blue.withOpacity(0.12) : Colors.blue[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isDark ? Colors.blue.withOpacity(0.3) : Colors.blue.shade100),
                 ),
-              ],
-            ),
-          ),
+                child: Row(
+                  children: [
+                    Icon(Icons.pin_drop, color: Colors.blue[700], size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Meeting Point',
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.blue[isDark ? 400 : 800]),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(mpTitle, style: TextStyle(fontSize: 13.5, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                          if (mpUrl.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(Icons.open_in_new, size: 12, color: Colors.blue[400]),
+                                const SizedBox(width: 4),
+                                Text('Open in Google Maps', style: TextStyle(fontSize: 12, color: Colors.blue[400])),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (mpUrl.isNotEmpty)
+                      Icon(Icons.navigation_outlined, color: Colors.blue[400], size: 20),
+                  ],
+                ),
+              ),
+            );
+          }),
         ],
 
         // Info cards

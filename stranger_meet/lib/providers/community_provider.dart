@@ -313,8 +313,13 @@ class CommunityMessagesNotifier
   CommunityMessagesNotifier(this._api, this.communityId)
       : super(const CommunityMessagesState());
 
+  void addMessageFromWebSocket(CommunityMessage message) {
+    if (!state.messages.any((m) => m.id == message.id)) {
+      state = state.copyWith(messages: [...state.messages, message]);
+    }
+  }
+
   Future<void> fetchMessages() async {
-    state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final response = await _api.get('/communities/$communityId/messages');
       final data = response.data;
@@ -322,9 +327,21 @@ class CommunityMessagesNotifier
           data is List ? data : (data['results'] ?? data['messages'] ?? []);
       final messages =
           results.map((e) => CommunityMessage.fromJson(e)).toList();
-      state = CommunityMessagesState(messages: messages);
+
+      // Only update if messages actually changed (avoid unnecessary rebuilds)
+      if (messages.length != state.messages.length ||
+          (messages.isNotEmpty &&
+              state.messages.isNotEmpty &&
+              messages.last.id != state.messages.last.id)) {
+        state = CommunityMessagesState(messages: messages);
+      } else if (state.isLoading) {
+        state = CommunityMessagesState(messages: messages);
+      }
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      if (state.messages.isEmpty) {
+        state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      }
+      // Don't update error state if we already have messages (polling failure shouldn't clear chat)
     }
   }
 
@@ -342,10 +359,11 @@ class CommunityMessagesNotifier
           'message_type': messageType,
         },
       );
-      final newMessage = CommunityMessage.fromJson(response.data);
-      state = state.copyWith(
-        messages: [...state.messages, newMessage],
-      );
+      // Add the server response directly (has real ID — prevents duplicates)
+      final newMsg = CommunityMessage.fromJson(response.data);
+      if (!state.messages.any((m) => m.id == newMsg.id)) {
+        state = state.copyWith(messages: [...state.messages, newMsg]);
+      }
     } catch (e) {
       state = state.copyWith(errorMessage: e.toString());
       rethrow;
@@ -471,8 +489,13 @@ class SubGroupMessagesNotifier extends StateNotifier<SubGroupMessagesState> {
 
   String get _basePath => '/communities/$communityId/groups/$groupId/messages';
 
+  void addMessageFromWebSocket(CommunityMessage message) {
+    if (!state.messages.any((m) => m.id == message.id)) {
+      state = state.copyWith(messages: [...state.messages, message]);
+    }
+  }
+
   Future<void> fetchMessages() async {
-    state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final response = await _api.get(_basePath);
       final data = response.data;
@@ -480,9 +503,21 @@ class SubGroupMessagesNotifier extends StateNotifier<SubGroupMessagesState> {
           data is List ? data : (data['results'] ?? data['messages'] ?? []);
       final messages =
           results.map((e) => CommunityMessage.fromJson(e)).toList();
-      state = SubGroupMessagesState(messages: messages);
+
+      // Only update if messages actually changed (avoid unnecessary rebuilds)
+      if (messages.length != state.messages.length ||
+          (messages.isNotEmpty &&
+              state.messages.isNotEmpty &&
+              messages.last.id != state.messages.last.id)) {
+        state = SubGroupMessagesState(messages: messages);
+      } else if (state.isLoading) {
+        state = SubGroupMessagesState(messages: messages);
+      }
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      if (state.messages.isEmpty) {
+        state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      }
+      // Don't update error state if we already have messages (polling failure shouldn't clear chat)
     }
   }
 
@@ -500,10 +535,11 @@ class SubGroupMessagesNotifier extends StateNotifier<SubGroupMessagesState> {
           'message_type': messageType,
         },
       );
-      final newMessage = CommunityMessage.fromJson(response.data);
-      state = state.copyWith(
-        messages: [...state.messages, newMessage],
-      );
+      // Add the server response directly (has real ID — prevents duplicates)
+      final newMsg = CommunityMessage.fromJson(response.data);
+      if (!state.messages.any((m) => m.id == newMsg.id)) {
+        state = state.copyWith(messages: [...state.messages, newMsg]);
+      }
     } catch (e) {
       state = state.copyWith(errorMessage: e.toString());
       rethrow;

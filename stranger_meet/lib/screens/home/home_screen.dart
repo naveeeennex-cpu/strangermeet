@@ -573,9 +573,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             return const SizedBox.shrink();
           }
           final post = postsState.posts[index];
+          final friendIds = ref.watch(friendProvider).friends
+              .map((f) => f.id)
+              .toSet();
           return _PostCard(
             post: post,
             sentRequests: _sentRequests,
+            friendIds: friendIds,
             onSendRequest: (userId) {
               setState(() => _sentRequests.add(userId));
               ref.read(friendProvider.notifier).sendRequest(userId);
@@ -1063,11 +1067,13 @@ class _StoryCircle extends StatelessWidget {
 class _PostCard extends ConsumerStatefulWidget {
   final dynamic post;
   final Set<String> sentRequests;
+  final Set<String> friendIds;
   final Function(String) onSendRequest;
 
   const _PostCard({
     required this.post,
     required this.sentRequests,
+    required this.friendIds,
     required this.onSendRequest,
   });
 
@@ -1095,6 +1101,7 @@ class _PostCardState extends ConsumerState<_PostCard>
     final post = widget.post;
     final currentUser = ref.watch(currentUserProvider);
     final isOwnPost = currentUser?.id == post.userId;
+    final isFriend = widget.friendIds.contains(post.userId);
     final hasRequested = widget.sentRequests.contains(post.userId);
 
     return Card(
@@ -1204,49 +1211,73 @@ class _PostCardState extends ConsumerState<_PostCard>
                       ),
                     ),
                   ),
-                  // Connect button — only for others' posts
+                  // Connect/Friends button — only for others' posts
                   if (!isOwnPost)
                     Padding(
                       padding: const EdgeInsets.only(left: 4),
-                      child: hasRequested
+                      child: isFriend
                           ? Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(16),
-                                border:
-                                    Border.all(color: Colors.grey[400]!),
+                                color: AppTheme.primaryColor.withOpacity(0.15),
+                                border: Border.all(color: AppTheme.primaryColor.withOpacity(0.4)),
                               ),
-                              child: Text(
-                                'Requested',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[500],
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle, size: 12, color: AppTheme.primaryColor),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Friends',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ],
                               ),
                             )
-                          : GestureDetector(
-                              onTap: () => widget.onSendRequest(post.userId),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                      color: AppTheme.primaryColor,
-                                      width: 1.5),
-                                ),
-                                child: Text(
-                                  'Connect',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                          : hasRequested
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.grey[400]!),
+                                  ),
+                                  child: Text(
+                                    'Requested',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey[500],
+                                    ),
+                                  ),
+                                )
+                              : GestureDetector(
+                                  onTap: () => widget.onSendRequest(post.userId),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                          color: AppTheme.primaryColor,
+                                          width: 1.5),
+                                    ),
+                                    child: Text(
+                                      'Connect',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
                     ),
                   // More options
                   IconButton(

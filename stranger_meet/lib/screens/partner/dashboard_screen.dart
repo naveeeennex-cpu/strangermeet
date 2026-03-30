@@ -19,9 +19,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(dashboardProvider.notifier).fetchDashboardStats(),
-    );
+    Future.microtask(() {
+      ref.read(dashboardProvider.notifier).fetchDashboardStats();
+      ref.read(adminCommunitiesProvider.notifier).fetchMyCommunities();
+    });
   }
 
   String _formatCurrency(double amount) {
@@ -165,7 +166,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: _QuickActionButton(
                             icon: Icons.people_outline,
                             label: 'Members',
-                            onTap: () => context.push('/partner-communities'),
+                            onTap: () {
+                              final communities =
+                                  ref.read(adminCommunitiesProvider).communities;
+                              if (communities.isNotEmpty) {
+                                context.push(
+                                    '/partner/community/${communities.first.id}/manage');
+                              } else {
+                                context.push('/partner-communities');
+                              }
+                            },
                           ),
                         ),
                       ],
@@ -428,7 +438,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.green[50],
+                          color: Colors.green.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -483,7 +493,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         borderRadius: BorderRadius.circular(4),
                         child: LinearProgressIndicator(
                           value: progress,
-                          backgroundColor: Colors.grey[200],
+                          backgroundColor: Theme.of(context).dividerColor,
                           valueColor: AlwaysStoppedAnimation<Color>(
                             progress >= 0.8 ? Colors.orange : AppTheme.primaryColor,
                           ),
@@ -528,12 +538,17 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? color.withOpacity(0.12) : bgColor;
+    final borderColor = isDark ? color.withOpacity(0.3) : color.withOpacity(0.2);
+    final valueColor = isDark ? Colors.white : Colors.black87;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: bgColor,
+        color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,7 +556,7 @@ class _StatCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withOpacity(isDark ? 0.25 : 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 22),
@@ -549,9 +564,10 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w800,
+              color: valueColor,
             ),
           ),
           const SizedBox(height: 2),
