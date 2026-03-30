@@ -187,7 +187,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   Container(
                     width: double.infinity,
                     height: 160,
-                    color: Colors.grey[200],
+                    color: Theme.of(context).colorScheme.surface,
                     child: user?.coverImageUrl != null && user!.coverImageUrl!.isNotEmpty
                         ? CachedNetworkImage(
                             imageUrl: user.coverImageUrl!,
@@ -241,7 +241,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 4),
+                        border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 4),
                       ),
                       child: CircleAvatar(
                         radius: 50,
@@ -263,7 +263,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       decoration: BoxDecoration(
                         color: AppTheme.primaryColor,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
+                        border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
                       ),
                       child: const Icon(Icons.camera_alt, size: 16, color: Colors.black),
                     ),

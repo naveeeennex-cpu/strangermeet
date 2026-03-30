@@ -1,9 +1,11 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 
 import '../config/constants.dart';
 import 'storage_service.dart';
+
+// Conditionally import for mobile SSL fix
+import 'api_service_mobile.dart' if (dart.library.html) 'api_service_web.dart' as platform;
 
 class ApiException implements Exception {
   final String message;
@@ -20,35 +22,25 @@ class ApiService {
   factory ApiService() => _instance;
 
   late final Dio _dio;
+  Dio get dio => _dio;
   final StorageService _storageService = StorageService();
 
   ApiService._internal() {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
-        sendTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 45),
+        receiveTimeout: const Duration(seconds: 45),
+        sendTimeout: const Duration(seconds: 45),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        // Force HTTP/1.1 — some mobile carriers have issues with HTTP/2
-        extra: {'withCredentials': false},
       ),
     );
 
-    // Fix SSL issues on some Android devices / mobile carriers
-    try {
-      (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-        final client = HttpClient();
-        client.badCertificateCallback = (cert, host, port) =>
-            host.contains('railway.app') || host.contains('supabase');
-        return client;
-      };
-    } catch (_) {
-      // Web platform doesn't have IOHttpClientAdapter — ignore
-    }
+    // Fix SSL/TLS issues on Android mobile data
+    platform.configureDio(_dio);
 
     _dio.interceptors.add(
       InterceptorsWrapper(
@@ -60,16 +52,20 @@ class ApiService {
           handler.next(options);
         },
         onError: (error, handler) async {
-          // Retry once on connection errors (mobile data flakiness)
-          if (error.type == DioExceptionType.connectionError ||
-              error.type == DioExceptionType.connectionTimeout) {
+          // Retry up to 2 times on connection errors (mobile data flakiness)
+          final retryCount = error.requestOptions.extra['retryCount'] ?? 0;
+          if (retryCount < 2 &&
+              (error.type == DioExceptionType.connectionError ||
+               error.type == DioExceptionType.connectionTimeout ||
+               error.type == DioExceptionType.sendTimeout ||
+               error.type == DioExceptionType.receiveTimeout)) {
             try {
+              await Future.delayed(Duration(milliseconds: 500 * (retryCount + 1)));
+              error.requestOptions.extra['retryCount'] = retryCount + 1;
               final response = await _dio.fetch(error.requestOptions);
               handler.resolve(response);
               return;
-            } catch (_) {
-              // Retry failed too — propagate original error
-            }
+            } catch (_) {}
           }
           handler.next(error);
         },

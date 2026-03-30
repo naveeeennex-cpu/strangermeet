@@ -261,7 +261,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -755,7 +755,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               decoration: BoxDecoration(
                 color: isSelected
                     ? AppTheme.primaryColor.withOpacity(0.2)
-                    : Colors.white,
+                    : Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(

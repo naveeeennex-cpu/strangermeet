@@ -70,7 +70,7 @@ class _CommunityDetailScreenState
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
@@ -78,7 +78,6 @@ class _CommunityDetailScreenState
             SliverAppBar(
               expandedHeight: 300,
               pinned: true,
-              backgroundColor: Colors.white,
               leading: GestureDetector(
                 onTap: () => context.pop(),
                 child: Container(
@@ -160,8 +159,8 @@ class _CommunityDetailScreenState
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.transparent,
-                              Colors.white.withOpacity(0.8),
-                              Colors.white,
+                              Theme.of(context).scaffoldBackgroundColor.withOpacity(0.8),
+                              Theme.of(context).scaffoldBackgroundColor,
                             ],
                             stops: const [0.0, 0.6, 1.0],
                           ),
@@ -178,9 +177,9 @@ class _CommunityDetailScreenState
               child: Transform.translate(
                 offset: const Offset(0, -16),
                 child: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                   ),
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                   child: Column(
@@ -272,7 +271,7 @@ class _CommunityDetailScreenState
                         style: TextStyle(
                           fontSize: 14,
                           height: 1.6,
-                          color: Colors.grey[700],
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
                         ),
                       ),
                       if (community.description.length > 150)
@@ -283,10 +282,10 @@ class _CommunityDetailScreenState
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
                               _descriptionExpanded ? 'Read less' : 'Read more',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.black,
+                                color: Theme.of(context).textTheme.bodyLarge?.color,
                               ),
                             ),
                           ),
@@ -310,9 +309,9 @@ class _CommunityDetailScreenState
               delegate: _SliverTabBarDelegate(
                 TabBar(
                   controller: _tabController,
-                  labelColor: Colors.black,
-                  unselectedLabelColor: Colors.grey[500],
-                  indicatorColor: Colors.black,
+                  labelColor: Theme.of(context).textTheme.bodyLarge?.color,
+                  unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color,
+                  indicatorColor: Theme.of(context).textTheme.bodyLarge?.color,
                   indicatorWeight: 3,
                   labelStyle: const TextStyle(
                     fontWeight: FontWeight.w700,
@@ -416,9 +415,9 @@ class _UpcomingEventsSection extends ConsumerWidget {
                   width: 200,
                   margin: const EdgeInsets.only(right: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade200),
+                    border: Border.all(color: Theme.of(context).dividerColor),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.04),
@@ -600,9 +599,9 @@ class _GroupsHorizontalSection extends ConsumerWidget {
                   margin: const EdgeInsets.only(right: 10),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.grey[50],
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.grey.shade200),
+                    border: Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -676,7 +675,7 @@ class _JoinBottomBar extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).scaffoldBackgroundColor,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -769,9 +768,9 @@ class _PostsTab extends ConsumerWidget {
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -955,16 +954,16 @@ class _GroupsTab extends ConsumerWidget {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(color: Theme.of(context).dividerColor),
                       ),
                       child: ListTile(
                         leading: Container(
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
-                            color: Colors.grey[100],
+                            color: Theme.of(context).colorScheme.surface,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
@@ -1098,9 +1097,9 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
             padding: const EdgeInsets.all(24),
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-              color: Colors.grey[50],
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: Column(
               children: [
@@ -1119,7 +1118,7 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -1161,9 +1160,9 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: isPast ? Colors.grey[50] : Colors.white,
+            color: isPast ? Theme.of(context).colorScheme.surface : (Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isPast ? Colors.grey.shade300 : Colors.grey.shade200),
+            border: Border.all(color: Theme.of(context).dividerColor),
             boxShadow: isPast ? [] : [
               BoxShadow(
                 color: Colors.black.withOpacity(0.03),
@@ -1447,7 +1446,7 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: Colors.white,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: tabBar,
     );
   }

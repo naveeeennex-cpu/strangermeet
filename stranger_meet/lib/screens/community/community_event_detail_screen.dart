@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../config/theme.dart';
 import '../../models/community.dart';
 import '../../providers/community_provider.dart';
 import '../../services/api_service.dart';
@@ -174,22 +173,21 @@ class _CommunityEventDetailScreenState
         : DateFormat('EEE, MMM d, yyyy').format(event.date);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
         elevation: 0,
         leading: GestureDetector(
           onTap: () => context.pop(),
-          child: const Icon(Icons.arrow_back, color: Colors.black),
+          child: Icon(Icons.arrow_back, color: Theme.of(context).iconTheme.color),
         ),
         title: Column(
           children: [
             Text(
               event.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: Colors.black,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -212,19 +210,19 @@ class _CommunityEventDetailScreenState
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: Theme.of(context).colorScheme.surface,
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.favorite_border, color: Colors.grey[700], size: 20),
+            child: Icon(Icons.favorite_border, color: Theme.of(context).textTheme.bodySmall?.color, size: 20),
           ),
         ],
         bottom: TabBar(
           controller: tabController,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.grey[600],
+          unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color,
           indicatorSize: TabBarIndicatorSize.tab,
           indicator: BoxDecoration(
-            color: Colors.black,
+            color: Theme.of(context).textTheme.bodyLarge?.color,
             borderRadius: BorderRadius.circular(10),
           ),
           indicatorPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
@@ -340,8 +338,8 @@ class _TourScheduleTabState extends ConsumerState<_TourScheduleTab> {
         // Trip title header
         Text(
           '${widget.event.durationDays}-Days ${widget.event.title}',
-          style: const TextStyle(
-              fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black),
+          style: TextStyle(
+              fontSize: 20, fontWeight: FontWeight.w800, color: Theme.of(context).textTheme.bodyLarge?.color),
         ),
         const SizedBox(height: 24),
 
@@ -411,10 +409,10 @@ class _CollapsibleDayCard extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isExpanded ? Colors.black.withOpacity(0.15) : Colors.grey.shade200,
+            color: isExpanded ? Theme.of(context).dividerColor : Theme.of(context).dividerColor,
           ),
           boxShadow: isExpanded
               ? [
@@ -447,12 +445,12 @@ class _CollapsibleDayCard extends StatelessWidget {
                         placeholder: (_, __) => Container(
                           width: 56,
                           height: 56,
-                          color: Colors.grey[200],
+                          color: Theme.of(context).dividerColor,
                         ),
                         errorWidget: (_, __, ___) => Container(
                           width: 56,
                           height: 56,
-                          color: Colors.grey[200],
+                          color: Theme.of(context).dividerColor,
                           child: const Icon(Icons.landscape, size: 24, color: Colors.grey),
                         ),
                       ),
@@ -482,10 +480,10 @@ class _CollapsibleDayCard extends StatelessWidget {
                           const SizedBox(height: 6),
                           Text(
                             day.title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: Colors.black,
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -501,13 +499,13 @@ class _CollapsibleDayCard extends StatelessWidget {
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
+                          color: Theme.of(context).colorScheme.surface,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.keyboard_arrow_down,
                           size: 20,
-                          color: Colors.black54,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                     ),
@@ -587,7 +585,7 @@ class _CollapsibleDayCard extends StatelessWidget {
                                     entry.value,
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Colors.grey[800],
+                                      color: Theme.of(context).textTheme.bodyLarge?.color,
                                       height: 1.5,
                                     ),
                                   ),
@@ -732,9 +730,9 @@ class _AccommodationTab extends ConsumerWidget {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.grey[50],
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -743,7 +741,7 @@ class _AccommodationTab extends ConsumerWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.07),
+                  color: Theme.of(context).dividerColor.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
@@ -858,9 +856,9 @@ class _BookingDetailsTab extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.grey[50],
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Column(
             children: [
@@ -917,7 +915,7 @@ class _BookingDetailsTab extends StatelessWidget {
                         item,
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[800],
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
                           height: 1.4,
                         ),
                       ),
@@ -955,7 +953,7 @@ class _BookingDetailsTab extends StatelessWidget {
                         item,
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[800],
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
                           height: 1.4,
                         ),
                       ),
@@ -987,7 +985,7 @@ class _BookingDetailsTab extends StatelessWidget {
                 Expanded(
                   child: Text(
                     event.meetingPoint,
-                    style: TextStyle(fontSize: 14, color: Colors.grey[800]),
+                    style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodyLarge?.color),
                   ),
                 ),
               ],
@@ -1110,7 +1108,7 @@ class _PriceRow extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 14,
-            color: isBold ? Colors.black : Colors.grey[600],
+            color: isBold ? Theme.of(context).textTheme.bodyLarge?.color : Theme.of(context).textTheme.bodySmall?.color,
             fontWeight: isBold ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
@@ -1119,7 +1117,7 @@ class _PriceRow extends StatelessWidget {
           style: TextStyle(
             fontSize: isBold ? 18 : 14,
             fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
-            color: Colors.black,
+            color: Theme.of(context).textTheme.bodyLarge?.color,
           ),
         ),
       ],
@@ -1145,9 +1143,9 @@ class _DetailGridCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1156,15 +1154,15 @@ class _DetailGridCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
           ),
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: Colors.black,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1209,7 +1207,7 @@ class _OverviewTab extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           event.description,
-          style: TextStyle(fontSize: 14.5, color: Colors.grey[700], height: 1.6),
+          style: TextStyle(fontSize: 14.5, color: Theme.of(context).textTheme.bodyLarge?.color, height: 1.6),
         ),
 
         // Meeting point
@@ -1241,7 +1239,7 @@ class _OverviewTab extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         event.meetingPoint,
-                        style: TextStyle(fontSize: 13.5, color: Colors.grey[700]),
+                        style: TextStyle(fontSize: 13.5, color: Theme.of(context).textTheme.bodyLarge?.color),
                       ),
                     ],
                   ),
@@ -1369,9 +1367,9 @@ class _InfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Row(
         children: [
@@ -1397,7 +1395,7 @@ class _InfoCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
                 ),
               ],
             ),
@@ -1459,7 +1457,7 @@ class _MembersTab extends StatelessWidget {
             (participant) => Container(
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: Colors.grey[50],
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: ListTile(
@@ -1532,7 +1530,7 @@ class _BottomBar extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).scaffoldBackgroundColor,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.06),
@@ -1631,7 +1629,7 @@ class _BottomBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).scaffoldBackgroundColor,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -1852,9 +1850,9 @@ class _BottomBar extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.grey[50],
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(color: Theme.of(context).dividerColor),
                     ),
                     child: Row(
                       children: [

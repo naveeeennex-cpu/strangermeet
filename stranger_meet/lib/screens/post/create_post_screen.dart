@@ -202,7 +202,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen>
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: AppTheme.primaryColor,
-          labelColor: AppTheme.textPrimary,
+          labelColor: Theme.of(context).textTheme.bodyLarge?.color,
           unselectedLabelColor: Colors.grey[500],
           tabs: const [
             Tab(

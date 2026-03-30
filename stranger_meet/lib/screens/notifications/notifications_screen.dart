@@ -116,8 +116,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
           controller: _tabController,
           indicatorColor: AppTheme.primaryColor,
           indicatorWeight: 3,
-          labelColor: AppTheme.textPrimary,
-          unselectedLabelColor: AppTheme.textSecondary,
+          labelColor: Theme.of(context).textTheme.bodyLarge?.color,
+          unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color,
           tabs: [
             Tab(
               child: Row(
@@ -236,9 +236,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[200]!),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Row(
             children: [
@@ -317,7 +317,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    side: BorderSide(color: Colors.grey[300]!),
+                    side: BorderSide(color: Theme.of(context).dividerColor),
                   ),
                   child: Icon(Icons.close, size: 18, color: Colors.grey[600]),
                 ),
