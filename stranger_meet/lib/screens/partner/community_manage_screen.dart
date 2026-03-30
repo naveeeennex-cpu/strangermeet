@@ -9,6 +9,7 @@ import '../../models/user.dart';
 import '../../models/community.dart';
 import '../../providers/admin_provider.dart';
 import '../../providers/community_provider.dart';
+import '../../services/api_service.dart';
 
 class CommunityManageScreen extends ConsumerStatefulWidget {
   final String communityId;
@@ -446,6 +447,139 @@ class _CommunityManageScreenState
             child: const Text('Delete'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showReopenEventDialog(Map<String, dynamic> event) {
+    final title = event['title']?.toString() ?? 'Event';
+    final eventId = event['id']?.toString() ?? '';
+    final dateController = TextEditingController();
+    final endDateController = TextEditingController();
+    final slotsController = TextEditingController(text: (event['slots'] ?? 30).toString());
+    DateTime? selectedDate;
+    DateTime? selectedEndDate;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Reopen: $title'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Set a new date to reopen this event.', style: TextStyle(fontSize: 13)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: dateController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'New Start Date *',
+                    prefixIcon: Icon(Icons.calendar_today),
+                  ),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: DateTime.now().add(const Duration(days: 7)),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      final time = await showTimePicker(
+                        context: ctx,
+                        initialTime: const TimeOfDay(hour: 9, minute: 0),
+                      );
+                      setDialogState(() {
+                        selectedDate = DateTime(
+                          picked.year, picked.month, picked.day,
+                          time?.hour ?? 9, time?.minute ?? 0,
+                        );
+                        dateController.text =
+                            '${picked.day}/${picked.month}/${picked.year} ${time?.format(ctx) ?? '09:00 AM'}';
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: endDateController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'New End Date (optional)',
+                    prefixIcon: Icon(Icons.calendar_today),
+                  ),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: selectedDate?.add(const Duration(days: 1)) ??
+                          DateTime.now().add(const Duration(days: 8)),
+                      firstDate: selectedDate ?? DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      setDialogState(() {
+                        selectedEndDate = picked;
+                        endDateController.text =
+                            '${picked.day}/${picked.month}/${picked.year}';
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: slotsController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Available Slots',
+                    prefixIcon: Icon(Icons.people_outline),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (selectedDate == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please select a new date')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                try {
+                  await ApiService().post(
+                    '/partner/communities/${widget.communityId}/events/$eventId/reopen',
+                    data: {
+                      'date': selectedDate!.toIso8601String(),
+                      'end_date': selectedEndDate?.toIso8601String(),
+                      'slots': int.tryParse(slotsController.text) ?? 30,
+                    },
+                  );
+                  _loadAdminEvents();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('"$title" reopened successfully!')),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Reopen'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1563,9 +1697,22 @@ class _CommunityManageScreenState
                             context.push(
                               '/partner/community/${widget.communityId}/trip/$eventId/manage',
                             );
+                          } else if (value == 'reopen') {
+                            _showReopenEventDialog(event);
                           }
                         },
                         itemBuilder: (ctx) => [
+                          if (isPast)
+                            PopupMenuItem(
+                              value: 'reopen',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.refresh, size: 18, color: Colors.green[700]),
+                                  const SizedBox(width: 8),
+                                  Text('Reopen Event', style: TextStyle(color: Colors.green[700])),
+                                ],
+                              ),
+                            ),
                           if (isTrip)
                             const PopupMenuItem(
                               value: 'manage_trip',

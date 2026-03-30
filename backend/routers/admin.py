@@ -557,6 +557,69 @@ async def admin_kick_member(
     return {"detail": "Member removed successfully"}
 
 
+@router.post("/communities/{community_id}/events/{event_id}/reopen")
+async def admin_reopen_event(
+    community_id: str,
+    event_id: str,
+    request: Request,
+    current_user: dict = Depends(require_partner),
+):
+    """Reopen a past event with a new date."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    community = await pool.fetchrow(
+        "SELECT id FROM communities WHERE id = $1 AND created_by = $2",
+        community_id, user_id
+    )
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+
+    # Get request body
+    body = await request.json()
+    new_date = body.get("date")
+    new_end_date = body.get("end_date")
+    new_slots = body.get("slots")
+
+    if not new_date:
+        raise HTTPException(status_code=400, detail="New date is required")
+
+    from datetime import datetime as dt
+    try:
+        parsed_date = dt.fromisoformat(new_date.replace('Z', '+00:00')).replace(tzinfo=None)
+        parsed_end_date = None
+        if new_end_date:
+            parsed_end_date = dt.fromisoformat(new_end_date.replace('Z', '+00:00')).replace(tzinfo=None)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid date format")
+
+    set_parts = ["date = $1"]
+    params = [parsed_date]
+    idx = 2
+
+    if parsed_end_date:
+        set_parts.append(f"end_date = ${idx}")
+        params.append(parsed_end_date)
+        idx += 1
+
+    if new_slots:
+        set_parts.append(f"slots = ${idx}")
+        params.append(int(new_slots))
+        idx += 1
+
+    params.append(event_id)
+    query = f"UPDATE community_events SET {', '.join(set_parts)} WHERE id = ${idx} RETURNING id, title"
+    row = await pool.fetchrow(query, *params)
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Clear old bookings for the reopened event
+    # (optional — keep if you want to retain enrollments)
+
+    return {"detail": "Event reopened", "id": str(row["id"]), "title": row["title"]}
+
+
 @router.get("/payments")
 async def admin_all_payments(
     request: Request,
