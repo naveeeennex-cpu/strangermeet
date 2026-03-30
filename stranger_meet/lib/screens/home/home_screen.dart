@@ -1313,8 +1313,9 @@ class _PostCardState extends ConsumerState<_PostCard>
             else if (post.imageUrl != null && post.imageUrl!.isNotEmpty)
               GestureDetector(
                 onDoubleTap: _onDoubleTap,
-                onTap: () {
-                  // Open full-screen image viewer
+                onTap: () => context.push('/post/${post.id}'),
+                onLongPress: () {
+                  // Open full-screen image viewer on long press
                   Navigator.of(context).push(
                     PageRouteBuilder(
                       opaque: false,
@@ -1328,21 +1329,25 @@ class _PostCardState extends ConsumerState<_PostCard>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    CachedNetworkImage(
-                      imageUrl: post.imageUrl!,
-                      width: double.infinity,
-                      height: 300,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
+                    InteractiveViewer(
+                      minScale: 1.0,
+                      maxScale: 3.0,
+                      child: CachedNetworkImage(
+                        imageUrl: post.imageUrl!,
+                        width: double.infinity,
                         height: 300,
-                        color: Theme.of(context).colorScheme.surface,
-                        child: const Center(child: CircularProgressIndicator()),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        height: 300,
-                        color: Theme.of(context).colorScheme.surface,
-                        child:
-                            const Icon(Icons.broken_image_outlined, size: 48),
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          height: 300,
+                          color: Theme.of(context).colorScheme.surface,
+                          child: const Center(child: CircularProgressIndicator()),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          height: 300,
+                          color: Theme.of(context).colorScheme.surface,
+                          child:
+                              const Icon(Icons.broken_image_outlined, size: 48),
+                        ),
                       ),
                     ),
                     // Heart animation overlay

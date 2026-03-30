@@ -11,6 +11,7 @@ import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/websocket_service.dart';
+import 'otp_verification_screen.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -23,6 +24,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _pageController = PageController();
   int _currentStep = 0;
   static const int _totalSteps = 4;
+  bool _isPhoneVerified = false;
 
   // Step 1 - Basic Info
   final _step1FormKey = GlobalKey<FormState>();
@@ -156,6 +158,25 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     if (_currentStep == 0) {
       if (!_step1FormKey.currentState!.validate()) return;
       if (_isUsernameAvailable == false) return;
+
+      // Verify phone number via OTP before proceeding
+      final phone = _phoneController.text.trim();
+      if (phone.isNotEmpty && !_isPhoneVerified) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationScreen(
+              phoneNumber: phone,
+              onVerified: () {
+                Navigator.pop(context);
+                setState(() => _isPhoneVerified = true);
+                _goToStep(1); // Proceed to step 2
+              },
+            ),
+          ),
+        );
+        return;
+      }
     }
     if (_currentStep == 2) {
       if (_selectedInterests.length < 3) {

@@ -27,6 +27,8 @@ dependencies:
   geocoding: ^4.0.0
   video_player: ^2.11.1
   chewie: ^1.13.0
+  firebase_core: ^4.6.0
+  firebase_auth: ^6.3.0
 
 dev_dependencies:
   flutter_test:
