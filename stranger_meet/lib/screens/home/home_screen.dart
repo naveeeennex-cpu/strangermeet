@@ -1313,6 +1313,18 @@ class _PostCardState extends ConsumerState<_PostCard>
             else if (post.imageUrl != null && post.imageUrl!.isNotEmpty)
               GestureDetector(
                 onDoubleTap: _onDoubleTap,
+                onTap: () {
+                  // Open full-screen image viewer
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      opaque: false,
+                      barrierColor: Colors.black87,
+                      pageBuilder: (context, _, __) => _FullScreenImageViewer(
+                        imageUrl: post.imageUrl!,
+                      ),
+                    ),
+                  );
+                },
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
@@ -1628,6 +1640,67 @@ class _PostCardState extends ConsumerState<_PostCard>
                 style: TextStyle(color: Colors.white)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Full Screen Image Viewer with Pinch-to-Zoom ──────────────────────────────
+
+class _FullScreenImageViewer extends StatelessWidget {
+  final String imageUrl;
+
+  const _FullScreenImageViewer({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        onVerticalDragEnd: (details) {
+          if (details.primaryVelocity != null &&
+              details.primaryVelocity!.abs() > 300) {
+            Navigator.of(context).pop();
+          }
+        },
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  placeholder: (context, url) => const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                  errorWidget: (context, url, error) => const Center(
+                    child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
+                  ),
+                ),
+              ),
+            ),
+            // Close button
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 12,
+              right: 16,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 24),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

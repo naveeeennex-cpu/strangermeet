@@ -486,10 +486,14 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                           )
                         else if (post.imageUrl != null &&
                             post.imageUrl!.isNotEmpty)
-                          CachedNetworkImage(
-                            imageUrl: post.imageUrl!,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
+                          InteractiveViewer(
+                            minScale: 1.0,
+                            maxScale: 4.0,
+                            child: CachedNetworkImage(
+                              imageUrl: post.imageUrl!,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         // Caption
                         if (post.caption.isNotEmpty)
