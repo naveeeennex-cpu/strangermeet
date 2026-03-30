@@ -128,11 +128,11 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                   child: Column(
                     children: [
                       Icon(Icons.grid_view_outlined,
-                          size: 40, color: Colors.grey[400]),
+                          size: 40, color: Theme.of(context).textTheme.bodySmall?.color),
                       const SizedBox(height: 8),
                       Text(
                         'No communities yet',
-                        style: TextStyle(color: Colors.grey[500]),
+                        style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
                       ),
                     ],
                   ),
@@ -174,9 +174,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   '${community.membersCount} members',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
-                                    color: Colors.grey,
+                                    color: Theme.of(context).textTheme.bodySmall?.color,
                                   ),
                                 ),
                               ],
@@ -234,11 +234,11 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                   child: Column(
                     children: [
                       Icon(Icons.event_busy_outlined,
-                          size: 40, color: Colors.grey[400]),
+                          size: 40, color: Theme.of(context).textTheme.bodySmall?.color),
                       const SizedBox(height: 8),
                       Text(
                         'No events data',
-                        style: TextStyle(color: Colors.grey[500]),
+                        style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
                       ),
                     ],
                   ),
@@ -295,9 +295,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                             const SizedBox(height: 4),
                             Text(
                               DateFormat('MMM d, yyyy').format(eventDate),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey,
+                                color: Theme.of(context).textTheme.bodySmall?.color,
                               ),
                             ),
                           ],
@@ -308,10 +308,10 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                             children: [
                               Text(
                                 '$enrolled/$slots enrolled',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey,
+                                  color: Theme.of(context).textTheme.bodySmall?.color,
                                 ),
                               ),
                               if (price > 0)
@@ -385,7 +385,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                         eventTitle,
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.grey,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                       trailing: Column(
@@ -440,11 +440,11 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                   child: Column(
                     children: [
                       Icon(Icons.receipt_long_outlined,
-                          size: 40, color: Colors.grey[400]),
+                          size: 40, color: Theme.of(context).textTheme.bodySmall?.color),
                       const SizedBox(height: 8),
                       Text(
                         'No payment data yet',
-                        style: TextStyle(color: Colors.grey[500]),
+                        style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
                       ),
                     ],
                   ),
@@ -496,7 +496,7 @@ class _SummaryCard extends StatelessWidget {
             title,
             style: TextStyle(
               fontSize: 11,
-              color: Colors.grey,
+              color: Theme.of(context).textTheme.bodySmall?.color,
               fontWeight: FontWeight.w500,
             ),
           ),

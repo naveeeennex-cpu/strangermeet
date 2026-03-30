@@ -43,11 +43,11 @@ class _MyCommunitiesScreenState
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
+                          color: Theme.of(context).colorScheme.surface,
                           shape: BoxShape.circle,
                         ),
                         child: Icon(Icons.grid_view_outlined,
-                            size: 48, color: Colors.grey[400]),
+                            size: 48, color: Theme.of(context).textTheme.bodySmall?.color),
                       ),
                       const SizedBox(height: 20),
                       Text(
@@ -55,7 +55,7 @@ class _MyCommunitiesScreenState
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey[600],
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -63,7 +63,7 @@ class _MyCommunitiesScreenState
                         'Create your first community to get started',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[500],
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -91,7 +91,7 @@ class _MyCommunitiesScreenState
                           margin: const EdgeInsets.only(bottom: 16),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: Colors.grey.shade200),
+                            border: Border.all(color: Theme.of(context).dividerColor),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: Column(
@@ -159,7 +159,7 @@ class _MyCommunitiesScreenState
                                                     vertical: 3),
                                             decoration: BoxDecoration(
                                               color:
-                                                  Colors.grey[100],
+                                                  Theme.of(context).colorScheme.surface,
                                               borderRadius:
                                                   BorderRadius.circular(6),
                                             ),
@@ -169,8 +169,7 @@ class _MyCommunitiesScreenState
                                               children: [
                                                 Icon(Icons.lock,
                                                     size: 12,
-                                                    color: Colors
-                                                        .grey[600]),
+                                                    color: Theme.of(context).textTheme.bodySmall?.color),
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   'Private',
@@ -179,7 +178,7 @@ class _MyCommunitiesScreenState
                                                     fontWeight:
                                                         FontWeight.w600,
                                                     color:
-                                                        Colors.grey[600],
+                                                        Theme.of(context).textTheme.bodySmall?.color,
                                                   ),
                                                 ),
                                               ],
@@ -328,7 +327,7 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey[500]),
+        Icon(icon, size: 16, color: Theme.of(context).textTheme.bodySmall?.color),
         const SizedBox(width: 4),
         Text(
           value,
@@ -342,7 +341,7 @@ class _MiniStat extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[500],
+            color: Theme.of(context).textTheme.bodySmall?.color,
           ),
         ),
       ],

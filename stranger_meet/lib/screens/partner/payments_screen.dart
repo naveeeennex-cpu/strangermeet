@@ -37,13 +37,13 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.receipt_long_outlined,
-                          size: 64, color: Colors.grey[300]),
+                          size: 64, color: Theme.of(context).textTheme.bodySmall?.color),
                       const SizedBox(height: 16),
                       Text(
                         'No payments yet',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey[500],
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                     ],

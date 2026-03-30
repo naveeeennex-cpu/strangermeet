@@ -772,8 +772,8 @@ class _CommunityManageScreenState
                   fit: BoxFit.cover,
                   errorWidget: (_, __, ___) => Container(
                     height: 180,
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.image, size: 48, color: Colors.grey),
+                    color: Theme.of(context).dividerColor,
+                    child: Icon(Icons.image, size: 48, color: Theme.of(context).textTheme.bodySmall?.color),
                   ),
                 ),
               ),
@@ -784,24 +784,24 @@ class _CommunityManageScreenState
                 width: double.infinity,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(color: Theme.of(context).dividerColor),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.image_outlined, size: 40, color: Colors.grey[400]),
+                    Icon(Icons.image_outlined, size: 40, color: Theme.of(context).textTheme.bodySmall?.color),
                     const SizedBox(height: 8),
-                    Text('No image set', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                    Text('No image set', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 13)),
                   ],
                 ),
               ),
             ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Community Name',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodySmall?.color),
           ),
           const SizedBox(height: 6),
           TextFormField(
@@ -811,9 +811,9 @@ class _CommunityManageScreenState
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             'Description',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodySmall?.color),
           ),
           const SizedBox(height: 6),
           TextFormField(
@@ -830,16 +830,16 @@ class _CommunityManageScreenState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.grey[50],
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.lock_outline, size: 20, color: Colors.grey[600]),
+                    Icon(Icons.lock_outline, size: 20, color: Theme.of(context).textTheme.bodySmall?.color),
                     const SizedBox(width: 10),
                     const Text(
                       'Private Community',
@@ -916,7 +916,7 @@ class _CommunityManageScreenState
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey[600],
+                  color: Theme.of(context).textTheme.bodySmall?.color,
                 ),
               ),
             ],
@@ -930,7 +930,7 @@ class _CommunityManageScreenState
                     _memberSearchController.text.isNotEmpty
                         ? 'No members match your search'
                         : 'No members',
-                    style: TextStyle(color: Colors.grey[500]),
+                    style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
                   ),
                 )
               : ListView.builder(
@@ -942,7 +942,7 @@ class _CommunityManageScreenState
                       margin: const EdgeInsets.only(bottom: 6),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(color: Theme.of(context).dividerColor),
                       ),
                       child: ListTile(
                         leading: CircleAvatar(
@@ -997,7 +997,7 @@ class _CommunityManageScreenState
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey[100],
+                                  color: Theme.of(context).colorScheme.surface,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -1005,7 +1005,7 @@ class _CommunityManageScreenState
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.grey[600],
+                                    color: Theme.of(context).textTheme.bodySmall?.color,
                                   ),
                                 ),
                               ),
@@ -1086,10 +1086,10 @@ class _CommunityManageScreenState
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.group_work_outlined,
-                    size: 48, color: Colors.grey[400]),
+                    size: 48, color: Theme.of(context).textTheme.bodySmall?.color),
                 const SizedBox(height: 12),
                 Text('No groups yet',
-                    style: TextStyle(color: Colors.grey[500])),
+                    style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color)),
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
                   onPressed: () => _showCreateGroupDialog(),
@@ -1109,7 +1109,7 @@ class _CommunityManageScreenState
               margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: Theme.of(context).dividerColor),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -1147,7 +1147,7 @@ class _CommunityManageScreenState
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: Colors.grey[100],
+                                      color: Theme.of(context).colorScheme.surface,
                                       borderRadius:
                                           BorderRadius.circular(6),
                                     ),
@@ -1156,7 +1156,7 @@ class _CommunityManageScreenState
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w600,
-                                        color: Colors.grey[600],
+                                        color: Theme.of(context).textTheme.bodySmall?.color,
                                       ),
                                     ),
                                   ),
@@ -1344,7 +1344,7 @@ class _CommunityManageScreenState
                       '${requests.length}',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.grey[500],
+                        color: Theme.of(context).textTheme.bodySmall?.color,
                       ),
                     ),
                 ],
@@ -1482,10 +1482,10 @@ class _CommunityManageScreenState
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.event_busy_outlined,
-                size: 48, color: Colors.grey[400]),
+                size: 48, color: Theme.of(context).textTheme.bodySmall?.color),
             const SizedBox(height: 12),
             Text('No events yet',
-                style: TextStyle(color: Colors.grey[500])),
+                style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color)),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1555,7 +1555,7 @@ class _CommunityManageScreenState
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.grey[200],
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -1563,7 +1563,7 @@ class _CommunityManageScreenState
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: Colors.grey[600],
+                      color: Theme.of(context).textTheme.bodySmall?.color,
                     ),
                   ),
                 ),
@@ -1597,7 +1597,7 @@ class _CommunityManageScreenState
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isPast ? Colors.grey.shade300 : Colors.grey.shade200),
+          border: Border.all(color: Theme.of(context).dividerColor),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -1659,7 +1659,7 @@ class _CommunityManageScreenState
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: Colors.grey[200],
+                            color: Theme.of(context).colorScheme.surface,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -1667,7 +1667,7 @@ class _CommunityManageScreenState
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey[600],
+                              color: Theme.of(context).textTheme.bodySmall?.color,
                             ),
                           ),
                         ),
@@ -1766,22 +1766,22 @@ class _CommunityManageScreenState
                     children: [
                       if (eventDate != null) ...[
                         Icon(Icons.calendar_today,
-                            size: 13, color: Colors.grey[600]),
+                            size: 13, color: Theme.of(context).textTheme.bodySmall?.color),
                         const SizedBox(width: 4),
                         Text(
                           DateFormat('MMM d, yyyy').format(eventDate),
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
                         ),
                         const SizedBox(width: 12),
                       ],
                       if (location.isNotEmpty) ...[
                         Icon(Icons.location_on_outlined,
-                            size: 13, color: Colors.grey[600]),
+                            size: 13, color: Theme.of(context).textTheme.bodySmall?.color),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
                             location,
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1807,7 +1807,7 @@ class _CommunityManageScreenState
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
-                            color: price > 0 ? Colors.green[700] : Colors.black87,
+                            color: price > 0 ? Colors.green[700] : Theme.of(context).textTheme.bodyLarge?.color,
                           ),
                         ),
                       ),
@@ -1829,7 +1829,7 @@ class _CommunityManageScreenState
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: progress,
-                      backgroundColor: Colors.grey[200],
+                      backgroundColor: Theme.of(context).dividerColor,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         isPast ? Colors.grey : AppTheme.primaryColor,
                       ),
@@ -1888,23 +1888,23 @@ class _EventTypeChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryColor.withOpacity(0.2) : Colors.grey[100],
+          color: isSelected ? AppTheme.primaryColor.withOpacity(0.2) : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+            color: isSelected ? AppTheme.primaryColor : Theme.of(context).dividerColor,
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: isSelected ? Colors.black : Colors.grey[600]),
+            Icon(icon, size: 18, color: isSelected ? Theme.of(context).textTheme.bodyLarge?.color : Theme.of(context).textTheme.bodySmall?.color),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.black : Colors.grey[600],
+                color: isSelected ? Theme.of(context).textTheme.bodyLarge?.color : Theme.of(context).textTheme.bodySmall?.color,
               ),
             ),
           ],

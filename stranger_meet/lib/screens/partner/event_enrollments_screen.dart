@@ -76,10 +76,10 @@ class _EventEnrollmentsScreenState
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.error_outline,
-                          size: 48, color: Colors.grey[400]),
+                          size: 48, color: Theme.of(context).textTheme.bodySmall?.color),
                       const SizedBox(height: 12),
                       Text(_error!,
-                          style: TextStyle(color: Colors.grey[600])),
+                          style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color)),
                       const SizedBox(height: 12),
                       ElevatedButton(
                         onPressed: _loadData,
@@ -116,11 +116,11 @@ class _EventEnrollmentsScreenState
                               child: Column(
                                 children: [
                                   Icon(Icons.people_outline,
-                                      size: 48, color: Colors.grey[400]),
+                                      size: 48, color: Theme.of(context).textTheme.bodySmall?.color),
                                   const SizedBox(height: 12),
                                   Text('No enrollments yet',
                                       style:
-                                          TextStyle(color: Colors.grey[500])),
+                                          TextStyle(color: Theme.of(context).textTheme.bodySmall?.color)),
                                 ],
                               ),
                             ),
@@ -175,16 +175,16 @@ class _EventEnrollmentsScreenState
             children: [
               if (eventDate != null) ...[
                 Icon(Icons.calendar_today,
-                    size: 15, color: Colors.grey[600]),
+                    size: 15, color: Theme.of(context).textTheme.bodySmall?.color),
                 const SizedBox(width: 4),
                 Text(
                   DateFormat('MMM d, yyyy').format(eventDate),
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodySmall?.color),
                 ),
                 const SizedBox(width: 16),
               ],
               Icon(Icons.local_offer_outlined,
-                  size: 15, color: Colors.grey[600]),
+                  size: 15, color: Theme.of(context).textTheme.bodySmall?.color),
               const SizedBox(width: 4),
               Text(
                 price > 0
@@ -192,7 +192,7 @@ class _EventEnrollmentsScreenState
                     : 'FREE',
                 style: TextStyle(
                   fontSize: 13,
-                  color: Colors.grey[600],
+                  color: Theme.of(context).textTheme.bodySmall?.color,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -203,13 +203,13 @@ class _EventEnrollmentsScreenState
             Row(
               children: [
                 Icon(Icons.location_on_outlined,
-                    size: 15, color: Colors.grey[600]),
+                    size: 15, color: Theme.of(context).textTheme.bodySmall?.color),
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
                     location,
                     style:
-                        TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodySmall?.color),
                   ),
                 ),
               ],

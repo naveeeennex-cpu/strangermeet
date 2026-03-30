@@ -149,9 +149,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: _QuickActionButton(
                             icon: Icons.add_circle_outline,
                             label: 'Create Event',
-                            onTap: () {
-                              // Navigate to communities first
-                            },
+                            onTap: () => context.push('/partner-communities'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -159,7 +157,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: _QuickActionButton(
                             icon: Icons.terrain_outlined,
                             label: 'Create Trip',
-                            onTap: () {},
+                            onTap: () => context.push('/partner-communities'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -167,7 +165,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: _QuickActionButton(
                             icon: Icons.people_outline,
                             label: 'Members',
-                            onTap: () {},
+                            onTap: () => context.push('/partner-communities'),
                           ),
                         ),
                       ],

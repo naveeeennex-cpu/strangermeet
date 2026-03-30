@@ -43,7 +43,8 @@ class _PartnerShellState extends State<PartnerShell> {
   Widget _buildBottomNavBar(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).bottomNavigationBarTheme.backgroundColor ??
+            Theme.of(context).scaffoldBackgroundColor,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -68,7 +69,7 @@ class _PartnerShellState extends State<PartnerShell> {
               _NavItem(
                 icon: Icons.grid_view_outlined,
                 activeIcon: Icons.grid_view,
-                label: 'Communities',
+                label: 'Manage',
                 isActive: _currentIndex == 1,
                 onTap: () => _onTabTapped(1, context),
               ),
