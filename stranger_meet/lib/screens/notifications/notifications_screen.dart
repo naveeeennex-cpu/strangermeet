@@ -244,7 +244,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: AppTheme.surfaceColor,
+                backgroundColor: Theme.of(context).colorScheme.surface,
                 backgroundImage: image != null && image.toString().isNotEmpty
                     ? CachedNetworkImageProvider(image.toString())
                     : null,
@@ -377,12 +377,12 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
           leading: CircleAvatar(
             radius: 22,
             backgroundColor:
-                isRead ? AppTheme.surfaceColor : AppTheme.primaryColor.withOpacity(0.2),
+                isRead ? Theme.of(context).colorScheme.surface : AppTheme.primaryColor.withOpacity(0.2),
             child: Text(
               senderName.isNotEmpty ? senderName[0].toUpperCase() : '?',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: isRead ? AppTheme.textSecondary : AppTheme.textPrimary,
+                color: isRead ? Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey : Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
               ),
             ),
           ),
@@ -399,7 +399,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 13,
-              color: isRead ? Colors.grey[500] : AppTheme.textPrimary,
+              color: isRead ? Colors.grey[500] : Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
             ),
           ),
           trailing: timestamp != null

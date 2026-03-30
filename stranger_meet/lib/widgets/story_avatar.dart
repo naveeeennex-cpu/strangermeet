@@ -84,7 +84,7 @@ class StoryAvatar extends StatelessWidget {
                             borderWidth -
                             gapWidth -
                             (isYourStory ? 1 : 0),
-                        backgroundColor: AppTheme.surfaceColor,
+                        backgroundColor: Theme.of(context).colorScheme.surface,
                         backgroundImage: imageUrl != null
                             ? CachedNetworkImageProvider(imageUrl!)
                             : null,
@@ -96,7 +96,7 @@ class StoryAvatar extends StatelessWidget {
                                 style: TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: (size / 3.5).clamp(12, 24),
-                                  color: AppTheme.textPrimary,
+                                  color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                                 ),
                               )
                             : null,
@@ -133,9 +133,9 @@ class StoryAvatar extends StatelessWidget {
             // Username
             Text(
               isYourStory ? 'Your story' : username,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: AppTheme.textPrimary,
+                color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

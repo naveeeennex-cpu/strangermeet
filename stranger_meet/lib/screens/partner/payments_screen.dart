@@ -78,9 +78,9 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                                     const SizedBox(height: 4),
                                     Text(
                                       payment.eventName,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
-                                        color: AppTheme.textSecondary,
+                                        color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -89,9 +89,9 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                                           ? DateFormat('MMM d, yyyy')
                                               .format(payment.date!)
                                           : '',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
-                                        color: AppTheme.textSecondary,
+                                        color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                                       ),
                                     ),
                                   ],

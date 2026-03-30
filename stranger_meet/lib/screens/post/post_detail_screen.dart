@@ -189,7 +189,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   Widget _buildAvatar(String? imageUrl, String name, {double radius = 16}) {
     return CircleAvatar(
       radius: radius,
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       backgroundImage:
           imageUrl != null && imageUrl.isNotEmpty
               ? CachedNetworkImageProvider(imageUrl)

@@ -245,7 +245,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       ),
                       child: CircleAvatar(
                         radius: 50,
-                        backgroundColor: AppTheme.surfaceColor,
+                        backgroundColor: Theme.of(context).colorScheme.surface,
                         backgroundImage: user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty
                             ? CachedNetworkImageProvider(user.profileImageUrl!)
                             : null,

@@ -122,7 +122,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -176,7 +176,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                   '${community.membersCount} members',
                                   style: const TextStyle(
                                     fontSize: 13,
-                                    color: AppTheme.textSecondary,
+                                    color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                                   ),
                                 ),
                               ],
@@ -228,7 +228,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -285,7 +285,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                   fontWeight: FontWeight.w700,
                                   fontSize: 14,
                                   color: price > 0
-                                      ? AppTheme.textPrimary
+                                      ? Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black
                                       : Colors.green[600],
                                 ),
                               ),
@@ -297,7 +297,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                               DateFormat('MMM d, yyyy').format(eventDate),
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: AppTheme.textSecondary,
+                                color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                               ),
                             ),
                           ],
@@ -311,7 +311,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: AppTheme.textSecondary,
+                                  color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                                 ),
                               ),
                               if (price > 0)
@@ -330,7 +330,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
                               value: progress,
-                              backgroundColor: AppTheme.surfaceColor,
+                              backgroundColor: Theme.of(context).colorScheme.surface,
                               valueColor:
                                   const AlwaysStoppedAnimation<Color>(
                                       AppTheme.primaryColor),
@@ -383,9 +383,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                       ),
                       subtitle: Text(
                         eventTitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: AppTheme.textSecondary,
+                          color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         ),
                       ),
                       trailing: Column(
@@ -434,7 +434,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -494,9 +494,9 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
-              color: AppTheme.textSecondary,
+              color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
               fontWeight: FontWeight.w500,
             ),
           ),

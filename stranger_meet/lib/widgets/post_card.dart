@@ -35,13 +35,13 @@ class PostCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
-            _buildMedia(),
-            _buildActionRow(),
-            _buildLikesText(),
-            _buildCaption(),
+            _buildHeader(context),
+            _buildMedia(context),
+            _buildActionRow(context),
+            _buildLikesText(context),
+            _buildCaption(context),
             if (post.commentsCount > 0) _buildViewComments(context),
-            _buildTimeAgo(),
+            _buildTimeAgo(context),
             const Divider(height: 1),
           ],
         ),
@@ -49,7 +49,10 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(BuildContext context) {
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    final secondaryColor = Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
       child: Row(
@@ -57,7 +60,7 @@ class PostCard extends StatelessWidget {
           // User avatar
           CircleAvatar(
             radius: 18,
-            backgroundColor: AppTheme.surfaceColor,
+            backgroundColor: Theme.of(context).colorScheme.surface,
             backgroundImage: post.userImage != null
                 ? CachedNetworkImageProvider(post.userImage!)
                 : null,
@@ -66,10 +69,10 @@ class PostCard extends StatelessWidget {
                     post.userName.isNotEmpty
                         ? post.userName[0].toUpperCase()
                         : '?',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
-                      color: AppTheme.textPrimary,
+                      color: textColor,
                     ),
                   )
                 : null,
@@ -84,10 +87,10 @@ class PostCard extends StatelessWidget {
                   children: [
                     Text(
                       post.userName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
-                        color: AppTheme.textPrimary,
+                        color: textColor,
                       ),
                     ),
                   ],
@@ -95,9 +98,9 @@ class PostCard extends StatelessWidget {
                 if (location != null && location!.isNotEmpty)
                   Text(
                     location!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      color: secondaryColor,
                     ),
                   ),
               ],
@@ -109,21 +112,21 @@ class PostCard extends StatelessWidget {
               padding: const EdgeInsets.only(right: 4),
               child: Text(
                 timeago.format(post.createdAt!, locale: 'en_short'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.textSecondary,
+                  color: secondaryColor,
                 ),
               ),
             ),
           // More menu
           GestureDetector(
             onTap: onMoreMenu,
-            child: const Padding(
-              padding: EdgeInsets.all(4),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
               child: Icon(
                 Icons.more_horiz,
                 size: 20,
-                color: AppTheme.textSecondary,
+                color: secondaryColor,
               ),
             ),
           ),
@@ -132,7 +135,7 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  Widget _buildMedia() {
+  Widget _buildMedia(BuildContext context) {
     if (post.mediaType == 'video' &&
         post.videoUrl != null &&
         post.videoUrl!.isNotEmpty) {
@@ -172,7 +175,7 @@ class PostCard extends StatelessWidget {
         placeholder: (context, url) => Container(
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 250),
-          color: AppTheme.surfaceColor,
+          color: Theme.of(context).colorScheme.surface,
           child: const Center(
             child: SizedBox(
               width: 24,
@@ -187,11 +190,11 @@ class PostCard extends StatelessWidget {
         errorWidget: (context, url, error) => Container(
           width: double.infinity,
           height: 250,
-          color: AppTheme.surfaceColor,
-          child: const Icon(
+          color: Theme.of(context).colorScheme.surface,
+          child: Icon(
             Icons.broken_image_outlined,
             size: 48,
-            color: AppTheme.textSecondary,
+            color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
           ),
         ),
       );
@@ -200,7 +203,9 @@ class PostCard extends StatelessWidget {
     return const SizedBox.shrink();
   }
 
-  Widget _buildActionRow() {
+  Widget _buildActionRow(BuildContext context) {
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Row(
@@ -213,7 +218,7 @@ class PostCard extends StatelessWidget {
               child: Icon(
                 post.isLiked ? Icons.favorite : Icons.favorite_border,
                 size: 26,
-                color: post.isLiked ? Colors.red : AppTheme.textPrimary,
+                color: post.isLiked ? Colors.red : textColor,
               ),
             ),
           ),
@@ -221,12 +226,12 @@ class PostCard extends StatelessWidget {
           // Comment button
           GestureDetector(
             onTap: onComment,
-            child: const Padding(
-              padding: EdgeInsets.all(4),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
               child: Icon(
                 Icons.chat_bubble_outline,
                 size: 24,
-                color: AppTheme.textPrimary,
+                color: textColor,
               ),
             ),
           ),
@@ -234,12 +239,12 @@ class PostCard extends StatelessWidget {
           // Share button
           GestureDetector(
             onTap: onShare,
-            child: const Padding(
-              padding: EdgeInsets.all(4),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
               child: Icon(
                 Icons.send_outlined,
                 size: 24,
-                color: AppTheme.textPrimary,
+                color: textColor,
               ),
             ),
           ),
@@ -250,7 +255,7 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  Widget _buildLikesText() {
+  Widget _buildLikesText(BuildContext context) {
     if (post.likesCount == 0) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
@@ -258,16 +263,16 @@ class PostCard extends StatelessWidget {
         post.likesCount == 1
             ? 'Liked by 1 person'
             : 'Liked by ${post.likesCount} others',
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 13,
-          color: AppTheme.textPrimary,
+          color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
         ),
       ),
     );
   }
 
-  Widget _buildCaption() {
+  Widget _buildCaption(BuildContext context) {
     if (post.caption.isEmpty) return const SizedBox.shrink();
 
     const int maxCaptionLength = 120;
@@ -279,9 +284,9 @@ class PostCard extends StatelessWidget {
         maxLines: 3,
         overflow: TextOverflow.ellipsis,
         text: TextSpan(
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
-            color: AppTheme.textPrimary,
+            color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
             height: 1.4,
           ),
           children: [
@@ -295,9 +300,9 @@ class PostCard extends StatelessWidget {
                   : post.caption,
             ),
             if (isLong)
-              const TextSpan(
+              TextSpan(
                 text: '...more',
-                style: TextStyle(color: AppTheme.textSecondary),
+                style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
               ),
           ],
         ),
@@ -312,24 +317,24 @@ class PostCard extends StatelessWidget {
         onTap: onComment,
         child: Text(
           'View all ${post.commentsCount} comments',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
-            color: AppTheme.textSecondary,
+            color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTimeAgo() {
+  Widget _buildTimeAgo(BuildContext context) {
     if (post.createdAt == null) return const SizedBox(height: 8);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
       child: Text(
         timeago.format(post.createdAt!).toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
-          color: AppTheme.textSecondary,
+          color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
           letterSpacing: 0.3,
         ),
       ),

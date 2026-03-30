@@ -192,10 +192,10 @@ class _CommunityDetailScreenState
                           Expanded(
                             child: Text(
                               community.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w800,
-                                color: AppTheme.textPrimary,
+                                color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                                 height: 1.2,
                               ),
                             ),
@@ -781,7 +781,7 @@ class _PostsTab extends ConsumerWidget {
                   children: [
                     CircleAvatar(
                       radius: 18,
-                      backgroundColor: AppTheme.surfaceColor,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
                       backgroundImage: post.userImage != null
                           ? CachedNetworkImageProvider(post.userImage!)
                           : null,

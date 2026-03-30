@@ -207,9 +207,9 @@ class LoadingOverlay extends StatelessWidget {
                     const SizedBox(height: 16),
                     Text(
                       message!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        color: AppTheme.textSecondary,
+                        color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                       ),
                     ),
                   ],

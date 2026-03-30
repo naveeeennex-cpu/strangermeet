@@ -43,8 +43,8 @@ class _FriendRequestsScreenState
         title: const Text('Friend Requests'),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppTheme.textPrimary,
-          unselectedLabelColor: AppTheme.textSecondary,
+          labelColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+          unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
           indicatorColor: AppTheme.primaryColor,
           indicatorWeight: 3,
           tabs: const [
@@ -84,7 +84,7 @@ class _FriendRequestsScreenState
                             child: ListTile(
                               leading: CircleAvatar(
                                 radius: 24,
-                                backgroundColor: AppTheme.surfaceColor,
+                                backgroundColor: Theme.of(context).colorScheme.surface,
                                 backgroundImage:
                                     request.requesterImage != null
                                         ? CachedNetworkImageProvider(
@@ -178,7 +178,7 @@ class _FriendRequestsScreenState
                             child: ListTile(
                               leading: CircleAvatar(
                                 radius: 24,
-                                backgroundColor: AppTheme.surfaceColor,
+                                backgroundColor: Theme.of(context).colorScheme.surface,
                                 backgroundImage:
                                     request.addresseeImage != null
                                         ? CachedNetworkImageProvider(
@@ -207,15 +207,15 @@ class _FriendRequestsScreenState
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.surfaceColor,
+                                  color: Theme.of(context).colorScheme.surface,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
                                   request.status.toUpperCase(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: AppTheme.textSecondary,
+                                    color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                                   ),
                                 ),
                               ),

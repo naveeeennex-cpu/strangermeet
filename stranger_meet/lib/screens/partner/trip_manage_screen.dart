@@ -166,8 +166,8 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
         title: const Text('Manage Trip'),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppTheme.textPrimary,
-          unselectedLabelColor: AppTheme.textSecondary,
+          labelColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+          unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
           indicatorColor: AppTheme.primaryColor,
           indicatorWeight: 3,
           tabs: const [
@@ -276,7 +276,7 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              backgroundColor: AppTheme.surfaceColor,
+              backgroundColor: Theme.of(context).colorScheme.surface,
               valueColor:
                   const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
               minHeight: 6,
@@ -291,12 +291,12 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: AppTheme.textSecondary),
+        Icon(icon, size: 14, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
         const SizedBox(width: 4),
         Flexible(
           child: Text(
             text,
-            style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -397,7 +397,7 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.textPrimary,
+                    color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -757,7 +757,7 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: AppTheme.surfaceColor,
+                            color: Theme.of(context).colorScheme.surface,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
@@ -910,7 +910,7 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
             ),
             child: Row(
               children: [
-                const Icon(Icons.group, color: AppTheme.textPrimary),
+                Icon(Icons.group, color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black),
                 const SizedBox(width: 10),
                 Text(
                   '${_enrollments.length} enrolled',
@@ -1188,7 +1188,7 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppTheme.primaryColor : AppTheme.surfaceColor,
+          color: selected ? AppTheme.primaryColor : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: selected ? AppTheme.primaryColor : AppTheme.dividerColor,
@@ -1198,7 +1198,7 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
           label,
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.black : AppTheme.textSecondary,
+            color: selected ? Colors.black : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
           ),
         ),
       ),
@@ -1264,13 +1264,13 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
             padding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle_outline,
-                    size: 16, color: AppTheme.textSecondary),
+                Icon(Icons.check_circle_outline,
+                    size: 16, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
                 const SizedBox(width: 8),
                 Expanded(
                     child:

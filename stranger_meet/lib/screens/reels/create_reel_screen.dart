@@ -115,17 +115,17 @@ class _CreateReelScreenState extends ConsumerState<CreateReelScreen> {
                           size: 18,
                           color: _mediaType == 'image'
                               ? Colors.black
-                              : AppTheme.textSecondary,
+                              : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         ),
                         label: const Text('Image'),
                         selected: _mediaType == 'image',
                         selectedColor: AppTheme.primaryColor,
-                        backgroundColor: AppTheme.surfaceColor,
+                        backgroundColor: Theme.of(context).colorScheme.surface,
                         labelStyle: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: _mediaType == 'image'
                               ? Colors.black
-                              : AppTheme.textSecondary,
+                              : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         ),
                         onSelected: (_) {
                           setState(() => _mediaType = 'image');
@@ -140,17 +140,17 @@ class _CreateReelScreenState extends ConsumerState<CreateReelScreen> {
                           size: 18,
                           color: _mediaType == 'video'
                               ? Colors.black
-                              : AppTheme.textSecondary,
+                              : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         ),
                         label: const Text('Video'),
                         selected: _mediaType == 'video',
                         selectedColor: AppTheme.primaryColor,
-                        backgroundColor: AppTheme.surfaceColor,
+                        backgroundColor: Theme.of(context).colorScheme.surface,
                         labelStyle: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: _mediaType == 'video'
                               ? Colors.black
-                              : AppTheme.textSecondary,
+                              : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         ),
                         onSelected: (_) {
                           setState(() => _mediaType = 'video');

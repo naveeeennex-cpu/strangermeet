@@ -23,6 +23,9 @@ class EventCard extends StatelessWidget {
         ? event.slots - event.participantsCount
         : -1; // -1 means unlimited
 
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    final secondaryColor = Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -43,7 +46,7 @@ class EventCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Event image
-            _buildImage(),
+            _buildImage(context),
             // Event details
             Padding(
               padding: const EdgeInsets.all(16),
@@ -53,10 +56,10 @@ class EventCard extends StatelessWidget {
                   // Title
                   Text(
                     event.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                      color: textColor,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -65,18 +68,18 @@ class EventCard extends StatelessWidget {
                   // Date row
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.calendar_today_outlined,
                         size: 16,
-                        color: AppTheme.textSecondary,
+                        color: secondaryColor,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         DateFormat('EEE, MMM dd - hh:mm a')
                             .format(event.date),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: AppTheme.textSecondary,
+                          color: secondaryColor,
                         ),
                       ),
                     ],
@@ -85,18 +88,18 @@ class EventCard extends StatelessWidget {
                   // Location row
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.location_on_outlined,
                         size: 16,
-                        color: AppTheme.textSecondary,
+                        color: secondaryColor,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           event.location,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: AppTheme.textSecondary,
+                            color: secondaryColor,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -137,7 +140,7 @@ class EventCard extends StatelessWidget {
                           size: 16,
                           color: slotsRemaining <= 5
                               ? AppTheme.errorColor
-                              : AppTheme.textSecondary,
+                              : secondaryColor,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -149,7 +152,7 @@ class EventCard extends StatelessWidget {
                             fontWeight: FontWeight.w500,
                             color: slotsRemaining <= 5
                                 ? AppTheme.errorColor
-                                : AppTheme.textSecondary,
+                                : secondaryColor,
                           ),
                         ),
                       ],
@@ -191,7 +194,10 @@ class EventCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImage() {
+  Widget _buildImage(BuildContext context) {
+    final secondaryColor = Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey;
+    final surfaceColor = Theme.of(context).colorScheme.surface;
+
     if (event.imageUrl != null) {
       return ClipRRect(
         borderRadius: const BorderRadius.vertical(
@@ -204,7 +210,7 @@ class EventCard extends StatelessWidget {
           fit: BoxFit.cover,
           placeholder: (context, url) => Container(
             height: 180,
-            color: AppTheme.surfaceColor,
+            color: surfaceColor,
             child: const Center(
               child: SizedBox(
                 width: 24,
@@ -218,11 +224,11 @@ class EventCard extends StatelessWidget {
           ),
           errorWidget: (context, url, error) => Container(
             height: 180,
-            color: AppTheme.surfaceColor,
-            child: const Icon(
+            color: surfaceColor,
+            child: Icon(
               Icons.event,
               size: 48,
-              color: AppTheme.textSecondary,
+              color: secondaryColor,
             ),
           ),
         ),
@@ -238,10 +244,10 @@ class EventCard extends StatelessWidget {
           top: Radius.circular(16),
         ),
       ),
-      child: const Icon(
+      child: Icon(
         Icons.event,
         size: 64,
-        color: AppTheme.textSecondary,
+        color: secondaryColor,
       ),
     );
   }

@@ -130,15 +130,15 @@ class _CreateSubGroupScreenState
                       avatar: Icon(
                         type['icon'] as IconData,
                         size: 18,
-                        color: isSelected ? Colors.black : AppTheme.textSecondary,
+                        color: isSelected ? Colors.black : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                       ),
                       label: Text(type['label'] as String),
                       selected: isSelected,
                       selectedColor: AppTheme.primaryColor,
-                      backgroundColor: AppTheme.surfaceColor,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
                       labelStyle: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: isSelected ? Colors.black : AppTheme.textSecondary,
+                        color: isSelected ? Colors.black : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                       ),
                       onSelected: (_) {
                         setState(

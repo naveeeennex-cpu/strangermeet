@@ -57,6 +57,11 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
+    final hintColor = theme.textTheme.bodySmall?.color ?? Colors.grey;
+    final fillColor = theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -64,10 +69,10 @@ class _CustomTextFieldState extends State<CustomTextField> {
         if (widget.labelText != null) ...[
           Text(
             widget.labelText!,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 8),
@@ -85,18 +90,18 @@ class _CustomTextFieldState extends State<CustomTextField> {
           enabled: widget.enabled,
           autofocus: widget.autofocus,
           focusNode: widget.focusNode,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
-            color: AppTheme.textPrimary,
+            color: textColor,
           ),
           decoration: InputDecoration(
             hintText: widget.hintText,
-            hintStyle: const TextStyle(
-              color: AppTheme.textSecondary,
+            hintStyle: TextStyle(
+              color: hintColor,
               fontSize: 14,
             ),
             filled: true,
-            fillColor: AppTheme.surfaceColor,
+            fillColor: fillColor,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 20,
               vertical: 16,
@@ -133,18 +138,18 @@ class _CustomTextFieldState extends State<CustomTextField> {
             prefixIcon: widget.prefixIcon != null
                 ? Icon(
                     widget.prefixIcon,
-                    color: AppTheme.textSecondary,
+                    color: hintColor,
                     size: 22,
                   )
                 : null,
-            suffixIcon: _buildSuffixIcon(),
+            suffixIcon: _buildSuffixIcon(hintColor),
           ),
         ),
       ],
     );
   }
 
-  Widget? _buildSuffixIcon() {
+  Widget? _buildSuffixIcon(Color iconColor) {
     if (widget.showPasswordToggle && widget.obscureText) {
       return GestureDetector(
         onTap: () => setState(() => _isObscured = !_isObscured),
@@ -152,7 +157,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
           _isObscured
               ? Icons.visibility_off_outlined
               : Icons.visibility_outlined,
-          color: AppTheme.textSecondary,
+          color: iconColor,
           size: 22,
         ),
       );
@@ -160,7 +165,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
     if (widget.suffixIcon != null) {
       return Icon(
         widget.suffixIcon,
-        color: AppTheme.textSecondary,
+        color: iconColor,
         size: 22,
       );
     }

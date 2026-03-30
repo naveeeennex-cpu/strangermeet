@@ -218,10 +218,10 @@ class _EventEnrollmentsScreenState
           const SizedBox(height: 12),
           Text(
             '$enrolled/$slots enrolled',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary,
+              color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
             ),
           ),
           const SizedBox(height: 8),
@@ -229,7 +229,7 @@ class _EventEnrollmentsScreenState
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              backgroundColor: AppTheme.surfaceColor,
+              backgroundColor: Theme.of(context).colorScheme.surface,
               valueColor: const AlwaysStoppedAnimation<Color>(
                   AppTheme.primaryColor),
               minHeight: 8,
@@ -282,9 +282,9 @@ class _EventEnrollmentsScreenState
         subtitle: bookedAt != null
             ? Text(
                 DateFormat('MMM d, yyyy').format(bookedAt),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.textSecondary,
+                  color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                 ),
               )
             : null,

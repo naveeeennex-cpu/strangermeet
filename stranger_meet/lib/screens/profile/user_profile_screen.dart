@@ -245,9 +245,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           delegate: _TabBarDelegate(
                             tabBar: TabBar(
                               controller: _tabController,
-                              indicatorColor: AppTheme.textPrimary,
-                              labelColor: AppTheme.textPrimary,
-                              unselectedLabelColor: AppTheme.textSecondary,
+                              indicatorColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+                              labelColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+                              unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                               tabs: const [
                                 Tab(icon: Icon(Icons.grid_on)),
                                 Tab(icon: Icon(Icons.people_outline)),
@@ -287,7 +287,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               // Avatar
               CircleAvatar(
                 radius: 40,
-                backgroundColor: AppTheme.surfaceColor,
+                backgroundColor: Theme.of(context).colorScheme.surface,
                 backgroundImage: profileImageUrl != null &&
                         profileImageUrl.toString().isNotEmpty
                     ? CachedNetworkImageProvider(profileImageUrl.toString())
@@ -564,18 +564,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   imageUrl: post.imageUrl!,
                   fit: BoxFit.cover,
                   placeholder: (context, url) => Container(
-                    color: AppTheme.surfaceColor,
+                    color: Theme.of(context).colorScheme.surface,
                     child: const Center(
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   ),
                   errorWidget: (context, url, error) => Container(
-                    color: AppTheme.surfaceColor,
+                    color: Theme.of(context).colorScheme.surface,
                     child: const Icon(Icons.broken_image_outlined),
                   ),
                 )
               : Container(
-                  color: AppTheme.surfaceColor,
+                  color: Theme.of(context).colorScheme.surface,
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.all(8),
@@ -698,7 +698,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           onTap: () => context.push('/community/$id'),
           leading: CircleAvatar(
             radius: 24,
-            backgroundColor: AppTheme.surfaceColor,
+            backgroundColor: Theme.of(context).colorScheme.surface,
             backgroundImage: imageUrl.isNotEmpty
                 ? CachedNetworkImageProvider(imageUrl)
                 : null,
@@ -768,7 +768,7 @@ class _UserPostCard extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 18,
-                    backgroundColor: AppTheme.surfaceColor,
+                    backgroundColor: Theme.of(context).colorScheme.surface,
                     backgroundImage: post.userImage != null
                         ? CachedNetworkImageProvider(post.userImage!)
                         : null,
@@ -777,9 +777,9 @@ class _UserPostCard extends StatelessWidget {
                             post.userName.isNotEmpty
                                 ? post.userName[0].toUpperCase()
                                 : '?',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
+                              color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                               fontSize: 14,
                             ),
                           )
@@ -820,12 +820,12 @@ class _UserPostCard extends StatelessWidget {
                 fit: BoxFit.cover,
                 placeholder: (context, url) => Container(
                   height: 300,
-                  color: AppTheme.surfaceColor,
+                  color: Theme.of(context).colorScheme.surface,
                   child: const Center(child: CircularProgressIndicator()),
                 ),
                 errorWidget: (context, url, error) => Container(
                   height: 300,
-                  color: AppTheme.surfaceColor,
+                  color: Theme.of(context).colorScheme.surface,
                   child: const Icon(Icons.broken_image_outlined, size: 48),
                 ),
               ),
@@ -894,7 +894,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: AppTheme.backgroundColor,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: tabBar,
     );
   }

@@ -188,13 +188,11 @@ class _CommunityGroupsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black),
           onPressed: () => context.pop(),
         ),
         titleSpacing: 0,
@@ -215,12 +213,12 @@ class _CommunityGroupsScreenState
                     )
                   : _communityInitialAvatar()
             else
-              const SizedBox(
+              SizedBox(
                 width: 40,
                 height: 40,
                 child: CircleAvatar(
-                  backgroundColor: AppTheme.surfaceColor,
-                  child: Icon(Icons.groups, size: 20, color: Colors.grey),
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  child: const Icon(Icons.groups, size: 20, color: Colors.grey),
                 ),
               ),
             const SizedBox(width: 12),
@@ -230,18 +228,18 @@ class _CommunityGroupsScreenState
                 children: [
                   Text(
                     _community?.name ?? 'Community',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                      color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const Text(
+                  Text(
                     'Community',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
@@ -252,7 +250,7 @@ class _CommunityGroupsScreenState
         ),
         actions: [
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
+            icon: Icon(Icons.more_vert, color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black),
             onSelected: (value) {
               if (value == 'info') {
                 context.push('/community/${widget.communityId}');
@@ -361,10 +359,10 @@ class _CommunityGroupsScreenState
       backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
       child: Text(
         name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w800,
           fontSize: 16,
-          color: AppTheme.textPrimary,
+          color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
         ),
       ),
     );
@@ -405,12 +403,12 @@ class _CommunityGroupsScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Announcements',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                      color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -418,9 +416,9 @@ class _CommunityGroupsScreenState
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: AppTheme.textSecondary,
+                      color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                     ),
                   ),
                 ],
@@ -433,18 +431,18 @@ class _CommunityGroupsScreenState
               children: [
                 Text(
                   time,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppTheme.textSecondary,
+                    color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Transform.rotate(
                   angle: 0.5,
-                  child: const Icon(
+                  child: Icon(
                     Icons.push_pin,
                     size: 16,
-                    color: AppTheme.textSecondary,
+                    color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                   ),
                 ),
               ],
@@ -461,10 +459,10 @@ class _CommunityGroupsScreenState
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: AppTheme.textSecondary,
+          color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
         ),
       ),
     );
@@ -528,10 +526,10 @@ class _CommunityGroupsScreenState
                           Flexible(
                             child: Text(
                               group.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
+                                color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -547,9 +545,9 @@ class _CommunityGroupsScreenState
                         children: [
                           Text(
                             '${group.membersCount} member${group.membersCount == 1 ? '' : 's'}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: AppTheme.textSecondary,
+                              color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                             ),
                           ),
                           if (isPending) ...[
@@ -593,9 +591,9 @@ class _CommunityGroupsScreenState
                             ),
                           ),
                         )
-                      : const Icon(
+                      : Icon(
                           Icons.chevron_right,
-                          color: AppTheme.textSecondary,
+                          color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         ),
                 if (isPending)
                   Icon(Icons.hourglass_top, size: 20, color: Colors.amber[700]),

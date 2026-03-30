@@ -80,7 +80,7 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                               radius: 28,
                               backgroundColor: isCommunity
                                   ? AppTheme.primaryColor.withOpacity(0.2)
-                                  : AppTheme.surfaceColor,
+                                  : Theme.of(context).colorScheme.surface,
                               backgroundImage:
                                   conversation.userImage != null &&
                                           conversation.userImage!.isNotEmpty
@@ -96,7 +96,7 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                                       size: 24,
                                       color: isCommunity
                                           ? AppTheme.primaryDark
-                                          : AppTheme.textSecondary,
+                                          : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                                     )
                                   : null,
                             ),
@@ -160,8 +160,8 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: conversation.unreadCount > 0
-                                ? AppTheme.textPrimary
-                                : AppTheme.textSecondary,
+                                ? Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black
+                                : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                             fontWeight: conversation.unreadCount > 0
                                 ? FontWeight.w500
                                 : FontWeight.w400,
@@ -177,7 +177,7 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                                 fontSize: 12,
                                 color: conversation.unreadCount > 0
                                     ? AppTheme.primaryDark
-                                    : AppTheme.textSecondary,
+                                    : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                               ),
                             ),
                             if (conversation.unreadCount > 0) ...[

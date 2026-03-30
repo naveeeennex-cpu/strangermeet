@@ -302,7 +302,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.arrow_back, size: 20),
@@ -314,7 +314,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.close, size: 20),
@@ -741,7 +741,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         decoration: BoxDecoration(
           color: isSelected
               ? AppTheme.primaryColor.withOpacity(0.1)
-              : AppTheme.surfaceColor,
+              : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected ? AppTheme.primaryColor : AppTheme.dividerColor,
@@ -763,7 +763,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 size: 24,
                 color: isSelected
                     ? Colors.black87
-                    : AppTheme.textSecondary,
+                    : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
               ),
             ),
             const SizedBox(width: 16),
@@ -778,7 +778,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       fontWeight: FontWeight.w600,
                       color: isSelected
                           ? Colors.black87
-                          : AppTheme.textPrimary,
+                          : Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -872,7 +872,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppTheme.primaryColor
-                        : AppTheme.surfaceColor,
+                        : Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
                       color: isSelected
@@ -887,7 +887,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       fontSize: 14,
                       fontWeight:
                           isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected ? Colors.black : AppTheme.textPrimary,
+                      color: isSelected ? Colors.black : Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                     ),
                   ),
                 ),
@@ -974,7 +974,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   height: 160,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppTheme.surfaceColor,
+                    color: Theme.of(context).colorScheme.surface,
                     border: Border.all(
                       color: _profileImage != null
                           ? AppTheme.primaryColor

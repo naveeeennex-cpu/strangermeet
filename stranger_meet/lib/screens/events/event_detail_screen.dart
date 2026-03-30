@@ -95,8 +95,8 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'by ${event.creatorName}',
-                    style: const TextStyle(
-                      color: AppTheme.textSecondary,
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                       fontSize: 14,
                     ),
                   ),
@@ -139,10 +139,10 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
                   const SizedBox(height: 8),
                   Text(
                     event.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       height: 1.6,
-                      color: AppTheme.textSecondary,
+                      color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -198,7 +198,7 @@ class _DetailRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: AppTheme.textSecondary),
+        Icon(icon, size: 20, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -206,9 +206,9 @@ class _DetailRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.textSecondary,
+                  color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                 ),
               ),
               const SizedBox(height: 2),

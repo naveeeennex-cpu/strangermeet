@@ -154,22 +154,22 @@ class _CreateCommunityScreenState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Private Community',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
                           'Only invited members can join',
                           style: TextStyle(
                             fontSize: 13,
-                            color: AppTheme.textSecondary,
+                            color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                           ),
                         ),
                       ],

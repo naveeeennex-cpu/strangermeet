@@ -570,8 +570,8 @@ class _CommunityManageScreenState
         title: const Text('Manage Community'),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppTheme.textPrimary,
-          unselectedLabelColor: AppTheme.textSecondary,
+          labelColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+          unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
           indicatorColor: AppTheme.primaryColor,
           indicatorWeight: 3,
           isScrollable: true,
@@ -667,7 +667,7 @@ class _CommunityManageScreenState
           const SizedBox(height: 24),
           const Text(
             'Community Name',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
           ),
           const SizedBox(height: 6),
           TextFormField(
@@ -679,7 +679,7 @@ class _CommunityManageScreenState
           const SizedBox(height: 20),
           const Text(
             'Description',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
           ),
           const SizedBox(height: 6),
           TextFormField(
@@ -813,7 +813,7 @@ class _CommunityManageScreenState
                       child: ListTile(
                         leading: CircleAvatar(
                           radius: 22,
-                          backgroundColor: AppTheme.surfaceColor,
+                          backgroundColor: Theme.of(context).colorScheme.surface,
                           backgroundImage: member.profileImageUrl != null
                               ? CachedNetworkImageProvider(
                                   member.profileImageUrl!)
@@ -879,9 +879,9 @@ class _CommunityManageScreenState
                         ),
                         subtitle: Text(
                           member.email,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppTheme.textSecondary,
+                            color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                           ),
                         ),
                         trailing: index == 0
@@ -987,8 +987,8 @@ class _CommunityManageScreenState
                         CircleAvatar(
                           backgroundColor:
                               AppTheme.primaryColor.withOpacity(0.2),
-                          child: const Icon(Icons.group,
-                              color: AppTheme.textPrimary, size: 20),
+                          child: Icon(Icons.group,
+                              color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black, size: 20),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -1031,9 +1031,9 @@ class _CommunityManageScreenState
                               const SizedBox(height: 2),
                               Text(
                                 '${group.membersCount} members',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: AppTheme.textSecondary,
+                                  color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                                 ),
                               ),
                             ],
@@ -1237,7 +1237,7 @@ class _CommunityManageScreenState
                               return ListTile(
                                 contentPadding: EdgeInsets.zero,
                                 leading: CircleAvatar(
-                                  backgroundColor: AppTheme.surfaceColor,
+                                  backgroundColor: Theme.of(context).colorScheme.surface,
                                   backgroundImage:
                                       req['user_profile_image'] != null
                                           ? CachedNetworkImageProvider(
@@ -1669,10 +1669,10 @@ class _CommunityManageScreenState
                         isPast
                             ? '$enrolled attended'
                             : '$enrolled/$slots enrolled',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.textSecondary,
+                          color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         ),
                       ),
                     ],

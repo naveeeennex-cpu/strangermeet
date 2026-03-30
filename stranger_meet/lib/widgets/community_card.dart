@@ -36,15 +36,15 @@ class CommunityCard extends StatelessWidget {
                       imageUrl: community.imageUrl!,
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(
-                        color: AppTheme.surfaceColor,
-                        child: const Center(
-                          child: Icon(Icons.group, size: 32, color: AppTheme.textSecondary),
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Center(
+                          child: Icon(Icons.group, size: 32, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
                         ),
                       ),
                       errorWidget: (context, url, error) => Container(
-                        color: AppTheme.surfaceColor,
-                        child: const Center(
-                          child: Icon(Icons.group, size: 32, color: AppTheme.textSecondary),
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Center(
+                          child: Icon(Icons.group, size: 32, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
                         ),
                       ),
                     )
@@ -53,10 +53,10 @@ class CommunityCard extends StatelessWidget {
                       child: Center(
                         child: Text(
                           community.name.isNotEmpty ? community.name[0].toUpperCase() : '?',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.w800,
-                            color: AppTheme.textPrimary,
+                            color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                           ),
                         ),
                       ),
@@ -102,10 +102,10 @@ class CommunityCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         if (community.isPrivate)
-                          const Icon(
+                          Icon(
                             Icons.lock,
                             size: 12,
-                            color: AppTheme.textSecondary,
+                            color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                           ),
                       ],
                     ),
@@ -113,17 +113,17 @@ class CommunityCard extends StatelessWidget {
                     // Member count
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.people_outline,
                           size: 14,
-                          color: AppTheme.textSecondary,
+                          color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${community.membersCount} members',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: AppTheme.textSecondary,
+                            color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                           ),
                         ),
                       ],
