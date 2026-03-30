@@ -780,9 +780,20 @@ class _EventCard extends StatelessWidget {
                         color: isTrip ? Colors.deepOrange : Colors.blue,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        isTrip ? '\u{1F3D5}\uFE0F Trip' : '\u{1F4C5} Event',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isTrip ? Icons.terrain : Icons.event,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isTrip ? 'Trip' : 'Event',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
                     ),
                     if (isTrip) ...[
@@ -935,7 +946,7 @@ class _EventCard extends StatelessWidget {
                           const Spacer(),
                           if (isTrip && event.maxAltitude > 0)
                             Text(
-                              '\u26F0\uFE0F ${event.maxAltitude.toStringAsFixed(0)}m',
+                              '${event.maxAltitude.toStringAsFixed(0)}m',
                               style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
                             ),
                         ],
