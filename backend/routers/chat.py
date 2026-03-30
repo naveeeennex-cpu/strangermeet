@@ -433,7 +433,7 @@ async def delete_message(
     request: Request,
     current_user: dict = Depends(get_current_user),
 ):
-    """Delete own message for everyone."""
+    """Delete own message for everyone (soft delete)."""
     pool = request.app.state.pool
     user_id = current_user["id"]
 
@@ -444,8 +444,12 @@ async def delete_message(
     if not msg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
 
-    await pool.execute("DELETE FROM messages WHERE id = $1", message_id)
-    return {"status": "ok"}
+    # Soft delete
+    await pool.execute(
+        "UPDATE messages SET is_deleted = true, deleted_by = $1, message = 'This message was deleted' WHERE id = $2",
+        user_id, message_id
+    )
+    return {"detail": "Message deleted", "deleted_by": current_user["name"]}
 
 
 @router.websocket("/ws/{token}")

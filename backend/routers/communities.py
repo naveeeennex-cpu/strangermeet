@@ -773,6 +773,9 @@ async def get_community_messages(
             timestamp=row["timestamp"],
             image_url=row.get("image_url") or "",
             message_type=row.get("message_type") or "text",
+            is_deleted=row.get("is_deleted") or False,
+            deleted_by=str(row["deleted_by"]) if row.get("deleted_by") else None,
+            is_pinned=row.get("is_pinned") or False,
         )
         for row in rows
     ]
@@ -815,19 +818,63 @@ async def delete_community_message(
     request: Request,
     current_user: dict = Depends(get_current_user),
 ):
-    """Delete own community message for everyone."""
+    """Delete community message for everyone (admin or message owner)."""
     pool = request.app.state.pool
     user_id = current_user["id"]
 
     msg = await pool.fetchrow(
-        "SELECT * FROM community_messages WHERE id = $1 AND community_id = $2 AND user_id = $3",
-        message_id, community_id, user_id,
+        "SELECT * FROM community_messages WHERE id = $1 AND community_id = $2",
+        message_id, community_id,
     )
     if not msg:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
 
-    await pool.execute("DELETE FROM community_messages WHERE id = $1", message_id)
-    return {"status": "ok"}
+    # Check if admin or message owner
+    is_admin = False
+    admin_check = await pool.fetchrow(
+        "SELECT role FROM community_members WHERE community_id = $1 AND user_id = $2 AND status = 'active'",
+        community_id, user_id
+    )
+    if admin_check and admin_check["role"] == "admin":
+        is_admin = True
+
+    if str(msg["user_id"]) != user_id and not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    # Soft delete
+    await pool.execute(
+        "UPDATE community_messages SET is_deleted = true, deleted_by = $1, message = 'This message was deleted' WHERE id = $2",
+        user_id, message_id
+    )
+    return {"detail": "Message deleted", "deleted_by": current_user["name"]}
+
+
+@router.post("/{community_id}/messages/{message_id}/pin")
+async def pin_community_message(
+    community_id: str,
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Pin/unpin a community message (admin only)."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    msg = await pool.fetchrow(
+        "SELECT id, is_pinned FROM community_messages WHERE id = $1 AND community_id = $2",
+        message_id, community_id,
+    )
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+    new_pinned = not (msg.get("is_pinned") or False)
+    await pool.execute(
+        "UPDATE community_messages SET is_pinned = $1 WHERE id = $2",
+        new_pinned, message_id
+    )
+    return {"detail": "Message pinned" if new_pinned else "Message unpinned", "is_pinned": new_pinned}
 
 
 # ── Sub-groups ───────────────────────────────────────────────────────────────
@@ -1187,6 +1234,9 @@ async def get_sub_group_messages(
             timestamp=row["timestamp"],
             image_url=row.get("image_url") or "",
             message_type=row.get("message_type") or "text",
+            is_deleted=row.get("is_deleted") or False,
+            deleted_by=str(row["deleted_by"]) if row.get("deleted_by") else None,
+            is_pinned=row.get("is_pinned") or False,
         )
         for row in rows
     ]
@@ -1231,19 +1281,317 @@ async def delete_sub_group_message(
     request: Request,
     current_user: dict = Depends(get_current_user),
 ):
-    """Delete own sub-group message for everyone."""
+    """Delete sub-group message for everyone (admin or message owner)."""
     pool = request.app.state.pool
     user_id = current_user["id"]
 
     msg = await pool.fetchrow(
-        "SELECT * FROM sub_group_messages WHERE id = $1 AND sub_group_id = $2 AND user_id = $3",
-        message_id, group_id, user_id,
+        "SELECT * FROM sub_group_messages WHERE id = $1 AND sub_group_id = $2",
+        message_id, group_id,
     )
     if not msg:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
 
-    await pool.execute("DELETE FROM sub_group_messages WHERE id = $1", message_id)
-    return {"status": "ok"}
+    # Check if admin or message owner
+    is_admin = False
+    admin_check = await pool.fetchrow(
+        "SELECT role FROM community_members WHERE community_id = $1 AND user_id = $2 AND status = 'active'",
+        community_id, user_id
+    )
+    if admin_check and admin_check["role"] == "admin":
+        is_admin = True
+
+    if str(msg["user_id"]) != user_id and not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    # Soft delete
+    await pool.execute(
+        "UPDATE sub_group_messages SET is_deleted = true, deleted_by = $1, message = 'This message was deleted' WHERE id = $2",
+        user_id, message_id
+    )
+    return {"detail": "Message deleted", "deleted_by": current_user["name"]}
+
+
+@router.post("/{community_id}/groups/{group_id}/messages/{message_id}/pin")
+async def pin_sub_group_message(
+    community_id: str,
+    group_id: str,
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Pin/unpin a sub-group message (admin only)."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    await _require_admin(pool, community_id, user_id)
+
+    msg = await pool.fetchrow(
+        "SELECT id, is_pinned FROM sub_group_messages WHERE id = $1 AND sub_group_id = $2",
+        message_id, group_id,
+    )
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+    new_pinned = not (msg.get("is_pinned") or False)
+    await pool.execute(
+        "UPDATE sub_group_messages SET is_pinned = $1 WHERE id = $2",
+        new_pinned, message_id
+    )
+    return {"detail": "Message pinned" if new_pinned else "Message unpinned", "is_pinned": new_pinned}
+
+
+@router.get("/{community_id}/groups/{group_id}/messages/pinned")
+async def get_pinned_sub_group_messages(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get all pinned messages in a sub-group."""
+    pool = request.app.state.pool
+
+    rows = await pool.fetch(
+        """SELECT sgm.*, u.name AS user_name, u.profile_image_url AS user_profile_image
+           FROM sub_group_messages sgm
+           JOIN users u ON sgm.user_id = u.id
+           WHERE sgm.sub_group_id = $1 AND sgm.is_pinned = true
+           ORDER BY sgm.timestamp DESC""",
+        group_id
+    )
+
+    return [
+        {
+            "id": str(row["id"]),
+            "sub_group_id": str(row["sub_group_id"]),
+            "user_id": str(row["user_id"]),
+            "user_name": row["user_name"],
+            "user_profile_image": row.get("user_profile_image"),
+            "message": row["message"],
+            "timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,
+            "image_url": row.get("image_url") or "",
+            "message_type": row.get("message_type") or "text",
+            "is_pinned": True,
+        }
+        for row in rows
+    ]
+
+
+@router.post("/{community_id}/groups/{group_id}/polls")
+async def create_poll(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Create a poll in a sub-group chat."""
+    import json as json_lib
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    body = await request.json()
+    question = body.get("question", "").strip()
+    options = body.get("options", [])
+    is_anonymous = body.get("is_anonymous", False)
+    is_multiple_choice = body.get("is_multiple_choice", False)
+
+    if not question:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question is required")
+    if len(options) < 2:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least 2 options are required")
+
+    options_json = json_lib.dumps([{"text": o, "votes": 0} for o in options])
+
+    row = await pool.fetchrow(
+        """INSERT INTO chat_polls (sub_group_id, created_by, question, options, is_anonymous, is_multiple_choice)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
+        group_id, user_id, question, options_json, is_anonymous, is_multiple_choice
+    )
+
+    poll_id = str(row["id"])
+
+    # Also insert a message of type 'poll' referencing this poll
+    await pool.execute(
+        "INSERT INTO sub_group_messages (sub_group_id, user_id, message, message_type, image_url) VALUES ($1, $2, $3, 'poll', $4)",
+        group_id, user_id, question, poll_id
+    )
+
+    return {
+        "id": poll_id,
+        "question": question,
+        "options": [{"text": o, "votes": 0} for o in options],
+        "is_anonymous": is_anonymous,
+        "is_multiple_choice": is_multiple_choice,
+        "created_by": user_id,
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+    }
+
+
+@router.post("/{community_id}/groups/{group_id}/polls/{poll_id}/vote")
+async def vote_on_poll(
+    community_id: str,
+    group_id: str,
+    poll_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Vote on a poll option (toggle)."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    body = await request.json()
+    option_index = body.get("option_index")
+
+    if option_index is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="option_index is required")
+
+    poll = await pool.fetchrow("SELECT * FROM chat_polls WHERE id = $1", poll_id)
+    if not poll:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poll not found")
+
+    is_multiple_choice = poll.get("is_multiple_choice", False)
+
+    # Check if already voted on this option
+    existing = await pool.fetchrow(
+        "SELECT id FROM chat_poll_votes WHERE poll_id = $1 AND user_id = $2 AND option_index = $3",
+        poll_id, user_id, option_index
+    )
+
+    if existing:
+        # Remove vote (toggle)
+        await pool.execute("DELETE FROM chat_poll_votes WHERE id = $1", str(existing["id"]))
+    else:
+        if not is_multiple_choice:
+            # Remove previous votes for single-choice
+            await pool.execute("DELETE FROM chat_poll_votes WHERE poll_id = $1 AND user_id = $2", poll_id, user_id)
+        await pool.execute(
+            "INSERT INTO chat_poll_votes (poll_id, user_id, option_index) VALUES ($1, $2, $3)",
+            poll_id, user_id, option_index
+        )
+
+    # Return updated poll with vote counts
+    import json as json_lib
+    options = json_lib.loads(poll["options"]) if isinstance(poll["options"], str) else poll["options"]
+    vote_rows = await pool.fetch(
+        "SELECT option_index, COUNT(*) AS cnt FROM chat_poll_votes WHERE poll_id = $1 GROUP BY option_index",
+        poll_id
+    )
+    vote_map = {r["option_index"]: r["cnt"] for r in vote_rows}
+
+    user_votes = await pool.fetch(
+        "SELECT option_index FROM chat_poll_votes WHERE poll_id = $1 AND user_id = $2",
+        poll_id, user_id
+    )
+    user_voted = [r["option_index"] for r in user_votes]
+
+    total_votes = sum(vote_map.values())
+    updated_options = []
+    for i, opt in enumerate(options):
+        updated_options.append({
+            "text": opt["text"],
+            "votes": vote_map.get(i, 0),
+        })
+
+    return {
+        "id": str(poll["id"]),
+        "question": poll["question"],
+        "options": updated_options,
+        "total_votes": total_votes,
+        "user_votes": user_voted,
+        "is_anonymous": poll.get("is_anonymous", False),
+        "is_multiple_choice": is_multiple_choice,
+    }
+
+
+@router.get("/{community_id}/groups/{group_id}/polls/{poll_id}")
+async def get_poll(
+    community_id: str,
+    group_id: str,
+    poll_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get poll details with vote counts."""
+    import json as json_lib
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    poll = await pool.fetchrow("SELECT * FROM chat_polls WHERE id = $1", poll_id)
+    if not poll:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poll not found")
+
+    options = json_lib.loads(poll["options"]) if isinstance(poll["options"], str) else poll["options"]
+    vote_rows = await pool.fetch(
+        "SELECT option_index, COUNT(*) AS cnt FROM chat_poll_votes WHERE poll_id = $1 GROUP BY option_index",
+        poll_id
+    )
+    vote_map = {r["option_index"]: r["cnt"] for r in vote_rows}
+
+    user_votes = await pool.fetch(
+        "SELECT option_index FROM chat_poll_votes WHERE poll_id = $1 AND user_id = $2",
+        poll_id, user_id
+    )
+    user_voted = [r["option_index"] for r in user_votes]
+
+    total_votes = sum(vote_map.values())
+    updated_options = []
+    for i, opt in enumerate(options):
+        updated_options.append({
+            "text": opt["text"],
+            "votes": vote_map.get(i, 0),
+        })
+
+    return {
+        "id": str(poll["id"]),
+        "question": poll["question"],
+        "options": updated_options,
+        "total_votes": total_votes,
+        "user_votes": user_voted,
+        "is_anonymous": poll.get("is_anonymous", False),
+        "is_multiple_choice": poll.get("is_multiple_choice", False),
+        "created_by": str(poll["created_by"]),
+        "created_at": poll["created_at"].isoformat() if poll["created_at"] else None,
+    }
+
+
+@router.post("/{community_id}/groups/{group_id}/messages/location")
+async def share_location(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Share a location message in a sub-group chat."""
+    import json as json_lib
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    body = await request.json()
+    lat = body.get("latitude")
+    lng = body.get("longitude")
+    address = body.get("address", "")
+
+    if lat is None or lng is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="latitude and longitude are required")
+
+    location_data = json_lib.dumps({"lat": lat, "lng": lng, "address": address})
+
+    row = await pool.fetchrow(
+        "INSERT INTO sub_group_messages (sub_group_id, user_id, message, message_type, image_url) VALUES ($1, $2, $3, 'location', $4) RETURNING *",
+        group_id, user_id, address or "Shared location", location_data
+    )
+
+    return {
+        "id": str(row["id"]),
+        "sub_group_id": str(row["sub_group_id"]),
+        "user_id": str(row["user_id"]),
+        "user_name": current_user["name"],
+        "user_profile_image": current_user.get("profile_image_url"),
+        "message": row["message"],
+        "timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,
+        "image_url": row.get("image_url") or "",
+        "message_type": "location",
+    }
 
 
 # ── Helper: build event response with trip fields ────────────────────────────

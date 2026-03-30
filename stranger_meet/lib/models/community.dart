@@ -188,6 +188,9 @@ class CommunityMessage {
   final DateTime? timestamp;
   final String imageUrl;
   final String messageType;
+  final bool isDeleted;
+  final String? deletedBy;
+  final bool isPinned;
 
   CommunityMessage({
     required this.id,
@@ -199,6 +202,9 @@ class CommunityMessage {
     this.timestamp,
     this.imageUrl = '',
     this.messageType = 'text',
+    this.isDeleted = false,
+    this.deletedBy,
+    this.isPinned = false,
   });
 
   factory CommunityMessage.fromJson(Map<String, dynamic> json) {
@@ -212,6 +218,9 @@ class CommunityMessage {
       timestamp: parseUtcToLocal(json['timestamp']) ?? parseUtcToLocal(json['created_at']),
       imageUrl: json['image_url'] ?? json['imageUrl'] ?? '',
       messageType: json['message_type'] ?? json['messageType'] ?? 'text',
+      isDeleted: json['is_deleted'] ?? json['isDeleted'] ?? false,
+      deletedBy: json['deleted_by']?.toString() ?? json['deletedBy']?.toString(),
+      isPinned: json['is_pinned'] ?? json['isPinned'] ?? false,
     );
   }
 
@@ -226,6 +235,9 @@ class CommunityMessage {
       'timestamp': timestamp?.toIso8601String(),
       'image_url': imageUrl,
       'message_type': messageType,
+      'is_deleted': isDeleted,
+      'deleted_by': deletedBy,
+      'is_pinned': isPinned,
     };
   }
 
@@ -239,6 +251,9 @@ class CommunityMessage {
     DateTime? timestamp,
     String? imageUrl,
     String? messageType,
+    bool? isDeleted,
+    String? deletedBy,
+    bool? isPinned,
   }) {
     return CommunityMessage(
       id: id ?? this.id,
@@ -250,6 +265,9 @@ class CommunityMessage {
       timestamp: timestamp ?? this.timestamp,
       imageUrl: imageUrl ?? this.imageUrl,
       messageType: messageType ?? this.messageType,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedBy: deletedBy ?? this.deletedBy,
+      isPinned: isPinned ?? this.isPinned,
     );
   }
 }

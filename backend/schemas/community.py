@@ -104,6 +104,9 @@ class CommunityMessageResponse(BaseModel):
     timestamp: datetime
     image_url: str = ""
     message_type: str = "text"
+    is_deleted: bool = False
+    deleted_by: Optional[str] = None
+    is_pinned: bool = False
 
 
 class SubGroupMessageCreate(BaseModel):
@@ -122,6 +125,9 @@ class SubGroupMessageResponse(BaseModel):
     timestamp: datetime
     image_url: str = ""
     message_type: str = "text"
+    is_deleted: bool = False
+    deleted_by: Optional[str] = None
+    is_pinned: bool = False
 
 
 class CommunityEventCreate(BaseModel):
