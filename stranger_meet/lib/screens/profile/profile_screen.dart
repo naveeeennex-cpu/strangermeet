@@ -446,28 +446,91 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       color: Theme.of(context).dividerColor.withOpacity(0.5),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => _showFriendsList(context, friendState.friends),
-                        child: _buildStat(
-                          friendState.friends.length,
-                          'Friends',
+                  child: IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _showFriendsList(context, friendState.friends),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${friendState.friends.length}',
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Friends',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(context).textTheme.bodySmall?.color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                      Container(
-                        width: 1,
-                        height: 36,
-                        color: Theme.of(context).dividerColor,
-                      ),
-                      _buildStat(_communityCount, 'Communities'),
-                      Container(
-                        width: 1,
-                        height: 36,
-                        color: Theme.of(context).dividerColor,
-                      ),
-                      _buildStat(_postCount, 'Posts'),
-                    ],
+                        Container(width: 1, height: 36, color: Theme.of(context).dividerColor),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '$_communityCount',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Communities',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context).textTheme.bodySmall?.color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(width: 1, height: 36, color: Theme.of(context).dividerColor),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '$_postCount',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Posts',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context).textTheme.bodySmall?.color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -654,31 +717,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   Widget _buildPostsGrid() {
     if (_isLoadingPosts) {
-      return const Center(child: CircularProgressIndicator());
+      return Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (_posts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.camera_alt_outlined, size: 56,
-                color: Theme.of(context).textTheme.bodySmall?.color),
-            const SizedBox(height: 12),
-            Text(
-              'No posts yet',
-              style: TextStyle(
-                color: Theme.of(context).textTheme.bodySmall?.color,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+      return Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.camera_alt_outlined, size: 56,
+                  color: Theme.of(context).textTheme.bodySmall?.color),
+              const SizedBox(height: 12),
+              Text(
+                'No posts yet',
+                style: TextStyle(
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () => context.push('/create-post'),
-              child: const Text('Create your first post'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => context.push('/create-post'),
+                child: const Text('Create your first post'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -774,36 +843,44 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   Widget _buildCommunitiesTab() {
     if (_isLoadingCommunities) {
-      return const Center(child: CircularProgressIndicator());
+      return Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (_communities.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.groups_outlined, size: 56,
-                color: Theme.of(context).textTheme.bodySmall?.color),
-            const SizedBox(height: 12),
-            Text(
-              'No communities joined yet',
-              style: TextStyle(
-                color: Theme.of(context).textTheme.bodySmall?.color,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+      return Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.groups_outlined, size: 56,
+                  color: Theme.of(context).textTheme.bodySmall?.color),
+              const SizedBox(height: 12),
+              Text(
+                'No communities joined yet',
+                style: TextStyle(
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () => context.go('/explore'),
-              child: const Text('Explore Communities'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => context.go('/explore'),
+                child: const Text('Explore Communities'),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    return ListView.builder(
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: _communities.length + 1, // +1 for logout button
       itemBuilder: (context, index) {
@@ -909,6 +986,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ),
         );
       },
+    ),
     );
   }
 }

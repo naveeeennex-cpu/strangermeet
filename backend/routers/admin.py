@@ -483,6 +483,7 @@ async def admin_update_sub_group(
         description=row["description"],
         type=row["type"],
         is_private=row.get("is_private", False) or False,
+        admin_only_chat=row.get("admin_only_chat", False) or False,
         created_by=str(row["created_by"]),
         creator_name=creator["name"] if creator else None,
         members_count=members_count or 0,
@@ -541,13 +542,21 @@ async def admin_kick_member(
     if member_user_id == user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot kick yourself")
 
+    # Mark as kicked instead of deleting — prevents auto-rejoin
     result = await pool.execute(
-        "DELETE FROM community_members WHERE community_id = $1 AND user_id = $2",
+        "UPDATE community_members SET status = 'kicked' WHERE community_id = $1 AND user_id = $2 AND status = 'active'",
         community_id, member_user_id
     )
 
-    if result == "DELETE 0":
+    if result == "UPDATE 0":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+
+    # Also remove from all sub-groups
+    await pool.execute(
+        """DELETE FROM sub_group_members WHERE user_id = $1 AND sub_group_id IN
+           (SELECT id FROM sub_groups WHERE community_id = $2)""",
+        member_user_id, community_id
+    )
 
     await pool.execute(
         "UPDATE communities SET members_count = GREATEST(members_count - 1, 0) WHERE id = $1",
@@ -753,6 +762,93 @@ async def admin_approve_join_request(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending request found")
 
     return {"detail": "Join request approved"}
+
+
+@router.put("/communities/{community_id}/toggle-admin-chat")
+async def toggle_admin_chat(
+    community_id: str,
+    request: Request,
+    current_user: dict = Depends(require_partner),
+):
+    """Toggle admin-only chat mode for a community."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    row = await pool.fetchrow(
+        "UPDATE communities SET admin_only_chat = NOT COALESCE(admin_only_chat, false) WHERE id = $1 AND created_by = $2 RETURNING id, admin_only_chat",
+        community_id, user_id
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found or not owned by you")
+
+    return {"id": str(row["id"]), "admin_only_chat": row["admin_only_chat"]}
+
+
+@router.put("/communities/{community_id}/groups/{group_id}/toggle-admin-chat")
+async def toggle_group_admin_chat(
+    community_id: str,
+    group_id: str,
+    request: Request,
+    current_user: dict = Depends(require_partner),
+):
+    """Toggle admin-only chat mode for a sub-group."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    community = await pool.fetchrow(
+        "SELECT id FROM communities WHERE id = $1 AND created_by = $2",
+        community_id, user_id
+    )
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found or not owned by you")
+
+    row = await pool.fetchrow(
+        "UPDATE sub_groups SET admin_only_chat = NOT COALESCE(admin_only_chat, false) WHERE id = $1 AND community_id = $2 RETURNING id, admin_only_chat",
+        group_id, community_id
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sub-group not found")
+
+    return {"id": str(row["id"]), "admin_only_chat": row["admin_only_chat"]}
+
+
+@router.put("/communities/{community_id}/members/{member_user_id}/role")
+async def change_member_role(
+    community_id: str,
+    member_user_id: str,
+    request: Request,
+    current_user: dict = Depends(require_partner),
+):
+    """Promote or demote a community member (admin <-> member)."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    # Verify ownership
+    community = await pool.fetchrow(
+        "SELECT id FROM communities WHERE id = $1 AND created_by = $2",
+        community_id, user_id
+    )
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found or not owned by you")
+
+    # Can't change own role
+    if member_user_id == user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot change your own role")
+
+    body = await request.json()
+    new_role = body.get("role", "member")
+    if new_role not in ("admin", "member"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Role must be 'admin' or 'member'")
+
+    result = await pool.execute(
+        "UPDATE community_members SET role = $1 WHERE community_id = $2 AND user_id = $3 AND status = 'active'",
+        new_role, community_id, member_user_id
+    )
+
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+
+    return {"detail": f"Role changed to {new_role}", "role": new_role}
 
 
 @router.post("/communities/{community_id}/groups/{group_id}/reject-request/{member_user_id}")

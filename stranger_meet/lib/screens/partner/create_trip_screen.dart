@@ -214,7 +214,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       }
 
       final response =
-          await ApiService().uploadFile('/upload/image', formData: formData);
+          await ApiService().uploadFile('/upload', formData: formData);
       return response.data['url']?.toString();
     } catch (e) {
       if (mounted) {

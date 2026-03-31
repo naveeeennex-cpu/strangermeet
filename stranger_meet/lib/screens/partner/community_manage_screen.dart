@@ -414,7 +414,7 @@ class _CommunityManageScreenState
                                       'file': await MultipartFile.fromFile(picked.path),
                                       'folder': 'events',
                                     });
-                                    final resp = await ApiService().uploadFile('/upload/image', formData: formData);
+                                    final resp = await ApiService().uploadFile('/upload', formData: formData);
                                     final url = resp.data['url']?.toString() ?? '';
                                     if (url.isNotEmpty) {
                                       setImageState(() => imageUrlCtrl.text = url);
@@ -1063,13 +1063,12 @@ class _CommunityManageScreenState
                               ),
                             ),
                             const SizedBox(width: 8),
-                            // Role badge - show Admin if it's the first member (creator)
-                            if (index == 0)
+                            if (member.memberRole == 'admin')
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue[50],
+                                  color: AppTheme.primaryColor.withOpacity(0.15),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -1077,7 +1076,7 @@ class _CommunityManageScreenState
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.blue[700],
+                                    color: AppTheme.primaryColor,
                                   ),
                                 ),
                               )
@@ -1109,47 +1108,125 @@ class _CommunityManageScreenState
                         ),
                         trailing: index == 0
                             ? null
-                            : IconButton(
+                            : PopupMenuButton<String>(
                                 icon: Icon(
-                                  Icons.person_remove_outlined,
-                                  color: AppTheme.errorColor,
+                                  Icons.more_vert,
+                                  color: Theme.of(context).textTheme.bodySmall?.color,
                                   size: 20,
                                 ),
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: const Text('Remove Member'),
-                                      content: Text(
-                                          'Remove ${member.name} from this community?'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(ctx),
-                                          child: const Text('Cancel'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () async {
-                                            Navigator.pop(ctx);
-                                            await ref
-                                                .read(
-                                                    adminCommunitiesProvider
-                                                        .notifier)
-                                                .kickMember(
-                                                    widget.communityId,
-                                                    member.id);
-                                            _loadMembers();
-                                          },
-                                          style: TextButton.styleFrom(
-                                            foregroundColor:
-                                                AppTheme.errorColor,
+                                color: Theme.of(context).bottomSheetTheme.backgroundColor ?? const Color(0xFF1E1E1E),
+                                onSelected: (value) async {
+                                  if (value == 'make_admin') {
+                                    try {
+                                      await ApiService().put(
+                                        '/partner/communities/${widget.communityId}/members/${member.id}/role',
+                                        data: {'role': 'admin'},
+                                      );
+                                      _loadMembers();
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('${member.name} promoted to Admin')),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Failed: $e')),
+                                        );
+                                      }
+                                    }
+                                  } else if (value == 'remove_admin') {
+                                    try {
+                                      await ApiService().put(
+                                        '/partner/communities/${widget.communityId}/members/${member.id}/role',
+                                        data: {'role': 'member'},
+                                      );
+                                      _loadMembers();
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('${member.name} demoted to Member')),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Failed: $e')),
+                                        );
+                                      }
+                                    }
+                                  } else if (value == 'chat') {
+                                    context.push('/chat/${member.id}?name=${Uri.encodeComponent(member.name)}');
+                                  } else if (value == 'kick') {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Remove Member'),
+                                        content: Text('Remove ${member.name} from this community?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx, false),
+                                            child: const Text('Cancel'),
                                           ),
-                                          child: const Text('Remove'),
-                                        ),
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx, true),
+                                            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+                                            child: const Text('Remove'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      await ref
+                                          .read(adminCommunitiesProvider.notifier)
+                                          .kickMember(widget.communityId, member.id);
+                                      _loadMembers();
+                                    }
+                                  }
+                                },
+                                itemBuilder: (ctx) => [
+                                  PopupMenuItem(
+                                    value: 'chat',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.chat_bubble_outline, size: 18, color: Theme.of(context).textTheme.bodyLarge?.color),
+                                        const SizedBox(width: 8),
+                                        Text('Chat', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color)),
                                       ],
                                     ),
-                                  );
-                                },
+                                  ),
+                                  if (member.memberRole != 'admin')
+                                    PopupMenuItem(
+                                      value: 'make_admin',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.admin_panel_settings, size: 18, color: AppTheme.primaryColor),
+                                          const SizedBox(width: 8),
+                                          Text('Make Admin', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color)),
+                                        ],
+                                      ),
+                                    )
+                                  else
+                                    PopupMenuItem(
+                                      value: 'remove_admin',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.person_outline, size: 18, color: Theme.of(context).textTheme.bodyLarge?.color),
+                                          const SizedBox(width: 8),
+                                          Text('Remove Admin', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color)),
+                                        ],
+                                      ),
+                                    ),
+                                  PopupMenuItem(
+                                    value: 'kick',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.remove_circle, size: 18, color: AppTheme.errorColor),
+                                        const SizedBox(width: 8),
+                                        Text('Kick', style: TextStyle(color: AppTheme.errorColor)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                       ),
                     );

@@ -14,6 +14,7 @@ class User {
   final String? occupation; // "student" or "working"
   final String? collegeName;
   final String? companyName;
+  final String? memberRole; // community membership role: 'admin' or 'member'
   final DateTime? createdAt;
 
   User({
@@ -30,6 +31,7 @@ class User {
     this.occupation,
     this.collegeName,
     this.companyName,
+    this.memberRole,
     this.createdAt,
   });
 
@@ -50,6 +52,7 @@ class User {
       occupation: json['occupation'],
       collegeName: json['college_name'] ?? json['collegeName'],
       companyName: json['company_name'] ?? json['companyName'],
+      memberRole: json['member_role'] ?? json['memberRole'],
       createdAt: parseUtcToLocal(json['created_at']) ?? parseUtcToLocal(json['createdAt']),
     );
   }
@@ -69,6 +72,7 @@ class User {
       'occupation': occupation,
       'college_name': collegeName,
       'company_name': companyName,
+      'member_role': memberRole,
       'created_at': createdAt?.toIso8601String(),
     };
   }
@@ -87,6 +91,7 @@ class User {
     String? occupation,
     String? collegeName,
     String? companyName,
+    String? memberRole,
     DateTime? createdAt,
   }) {
     return User(
@@ -103,6 +108,7 @@ class User {
       occupation: occupation ?? this.occupation,
       collegeName: collegeName ?? this.collegeName,
       companyName: companyName ?? this.companyName,
+      memberRole: memberRole ?? this.memberRole,
       createdAt: createdAt ?? this.createdAt,
     );
   }

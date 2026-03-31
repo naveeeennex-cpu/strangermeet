@@ -400,6 +400,19 @@ async def join_community(
     if not community:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
 
+    # Check if kicked — must request admin to rejoin
+    kicked = await pool.fetchrow(
+        "SELECT id FROM community_members WHERE community_id = $1 AND user_id = $2 AND status = 'kicked'",
+        community_id, user_id
+    )
+    if kicked:
+        # Update status to pending (request to rejoin)
+        await pool.execute(
+            "UPDATE community_members SET status = 'pending' WHERE community_id = $1 AND user_id = $2 AND status = 'kicked'",
+            community_id, user_id
+        )
+        return {"detail": "Rejoin request sent to admin", "status": "pending"}
+
     existing = await _get_membership(pool, community_id, user_id)
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already a member")
@@ -725,6 +738,16 @@ async def send_community_message(
 
     await _require_member(pool, community_id, user_id)
 
+    # Check if admin-only chat is enabled for this community
+    community_row = await pool.fetchrow("SELECT admin_only_chat FROM communities WHERE id = $1", community_id)
+    if community_row and community_row.get("admin_only_chat"):
+        member = await pool.fetchrow(
+            "SELECT role FROM community_members WHERE community_id = $1 AND user_id = $2 AND status = 'active'",
+            community_id, user_id
+        )
+        if not member or member["role"] != "admin":
+            raise HTTPException(status_code=403, detail="Only admins can send messages in this chat")
+
     row = await pool.fetchrow(
         "INSERT INTO community_messages (community_id, user_id, message, image_url, message_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         community_id, user_id, data.message, data.image_url, data.message_type
@@ -939,6 +962,7 @@ async def create_sub_group(
         description=row["description"],
         type=row["type"],
         is_private=row.get("is_private", False) or False,
+        admin_only_chat=row.get("admin_only_chat", False) or False,
         created_by=str(row["created_by"]),
         creator_name=current_user["name"],
         members_count=1,
@@ -976,6 +1000,7 @@ async def list_sub_groups(
             description=row["description"],
             type=row["type"],
             is_private=row.get("is_private", False) or False,
+            admin_only_chat=row.get("admin_only_chat", False) or False,
             created_by=str(row["created_by"]),
             creator_name=row["creator_name"],
             members_count=row["members_count"],
@@ -1022,6 +1047,7 @@ async def update_sub_group(
         description=row["description"],
         type=row["type"],
         is_private=row.get("is_private", False) or False,
+        admin_only_chat=row.get("admin_only_chat", False) or False,
         created_by=str(row["created_by"]),
         creator_name=creator["name"] if creator else None,
         members_count=members_count or 0,
@@ -1245,6 +1271,16 @@ async def send_sub_group_message(
             pass
     elif member.get("status") == "pending":
         raise HTTPException(status_code=403, detail="Your join request is pending admin approval.")
+
+    # Check if admin-only chat is enabled for this sub-group
+    group_row = await pool.fetchrow("SELECT admin_only_chat FROM sub_groups WHERE id = $1", group_id)
+    if group_row and group_row.get("admin_only_chat"):
+        cm = await pool.fetchrow(
+            "SELECT role FROM community_members WHERE community_id = $1 AND user_id = $2 AND status = 'active'",
+            community_id, user_id
+        )
+        if not cm or cm["role"] != "admin":
+            raise HTTPException(status_code=403, detail="Only admins can send messages in this group")
 
     row = await pool.fetchrow(
         "INSERT INTO sub_group_messages (sub_group_id, user_id, message, image_url, message_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",

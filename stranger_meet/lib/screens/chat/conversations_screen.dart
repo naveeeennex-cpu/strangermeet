@@ -27,19 +27,24 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
   @override
   void initState() {
     super.initState();
-    _refreshConversations();
+    // Delay fetch until after first frame to avoid modifying provider during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refreshConversations();
+    });
 
     // Listen for new messages via WebSocket → refresh list
     _wsSubscription = WebSocketService().messageStream.listen((data) {
       if (!mounted) return;
       final type = data['type']?.toString() ?? '';
       if (type == 'message' || type == 'group_message') {
-        _refreshConversations();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _refreshConversations();
+        });
       }
     });
 
-    // Periodic refresh every 5 seconds (catches any missed updates)
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    // Periodic refresh every 15 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) _refreshConversations();
     });
   }
@@ -132,9 +137,7 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
               onRefresh: () => ref
                   .read(conversationsProvider.notifier)
                   .fetchConversations(),
-              child: state.isLoading && state.conversations.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildConversationList(state),
+              child: _buildConversationList(state),
             ),
           ),
         ],

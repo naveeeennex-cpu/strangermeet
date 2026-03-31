@@ -147,6 +147,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
   String? _currentUserId;
   bool _isUploading = false;
   bool _isAdmin = false;
+  bool _adminOnlyChat = false;
   List<CommunityMessage> _pinnedMessages = [];
   final Map<String, Map<String, dynamic>> _pollCache = {};
   Timer? _pollTimer;
@@ -433,6 +434,48 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
         if (mounted) setState(() => _isAdmin = true);
       }
     } catch (_) {}
+
+    // Fetch admin_only_chat status for this sub-group
+    try {
+      final groupsResp = await ApiService().get(
+        '/communities/${widget.communityId}/groups',
+      );
+      final groups = groupsResp.data is List ? groupsResp.data : [];
+      for (final g in groups) {
+        if (g['id']?.toString() == widget.groupId) {
+          if (mounted) {
+            setState(() => _adminOnlyChat = g['admin_only_chat'] == true);
+          }
+          break;
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleAdminOnlyChat() async {
+    try {
+      final response = await ApiService().put(
+        '/partner/communities/${widget.communityId}/groups/${widget.groupId}/toggle-admin-chat',
+      );
+      final data = response.data;
+      if (mounted) {
+        setState(() => _adminOnlyChat = data['admin_only_chat'] == true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_adminOnlyChat
+                ? 'Admin-only chat enabled'
+                : 'Admin-only chat disabled'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to toggle: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _fetchPinnedMessages() async {
@@ -652,7 +695,15 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                               itemCount: membersState.members.length,
                               itemBuilder: (context, index) {
                                 final member = membersState.members[index];
-                                return _MemberListTile(member: member);
+                                return _MemberListTile(
+                                  member: member,
+                                  isCurrentUserAdmin: _isAdmin,
+                                  communityId: widget.communityId,
+                                  onRefresh: () {
+                                    ref.read(subGroupMembersProvider(_providerKey).notifier).fetchMembers();
+                                    Navigator.of(context).pop();
+                                  },
+                                );
                               },
                             ),
                 ),
@@ -1438,8 +1489,18 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       appBar: AppBar(
         backgroundColor: _kChatAppBarBg,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Group Chat',
-            style: TextStyle(color: Colors.white)),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_adminOnlyChat)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Icon(Icons.lock, size: 16, color: Colors.amber[400]),
+              ),
+            const Text('Group Chat',
+                style: TextStyle(color: Colors.white)),
+          ],
+        ),
         actions: [
           InkWell(
             onTap: _showMembersBottomSheet,
@@ -1463,6 +1524,37 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
               ),
             ),
           ),
+          if (_isAdmin)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white),
+              color: const Color(0xFF1E1E1E),
+              onSelected: (value) {
+                if (value == 'toggle_admin_chat') {
+                  _toggleAdminOnlyChat();
+                }
+              },
+              itemBuilder: (ctx) => [
+                PopupMenuItem(
+                  value: 'toggle_admin_chat',
+                  child: Row(
+                    children: [
+                      Icon(
+                        _adminOnlyChat ? Icons.lock_open : Icons.lock,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _adminOnlyChat
+                            ? 'Disable Admin-only Chat'
+                            : 'Enable Admin-only Chat',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(width: 4),
         ],
       ),
@@ -1617,58 +1709,78 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
           _buildMentionOverlay(),
           // Reply preview
           _buildReplyPreview(),
-          Container(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-            decoration: const BoxDecoration(
-              color: _kInputBarBg,
-              border: Border(
-                top: BorderSide(color: Color(0xFF2A2A2A)),
+          // Input bar or admin-only notice
+          if (_adminOnlyChat && !_isAdmin)
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: const Color(0xFF1A1A1A),
+              child: SafeArea(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock_outline, size: 16, color: Colors.grey[500]),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Only admins can send messages',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
-                    onPressed: _isUploading ? null : _showAttachmentMenu,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      focusNode: _messageFocusNode,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Type a message...',
-                        hintStyle: TextStyle(color: Colors.grey[600]),
-                        filled: true,
-                        fillColor: _kInputFieldBg,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
+            )
+          else
+            Container(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+              decoration: const BoxDecoration(
+                color: _kInputBarBg,
+                border: Border(
+                  top: BorderSide(color: Color(0xFF2A2A2A)),
+                ),
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
+                      onPressed: _isUploading ? null : _showAttachmentMenu,
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        focusNode: _messageFocusNode,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Type a message...',
+                          hintStyle: TextStyle(color: Colors.grey[600]),
+                          filled: true,
+                          fillColor: _kInputFieldBg,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
+                        onSubmitted: (_) => _sendMessage(),
                       ),
-                      onSubmitted: (_) => _sendMessage(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: AppTheme.primaryColor,
-                      shape: BoxShape.circle,
+                    const SizedBox(width: 8),
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: AppTheme.primaryColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.send, color: Colors.black),
+                        onPressed: _sendMessage,
+                      ),
                     ),
-                    child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.black),
-                      onPressed: _sendMessage,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -2074,8 +2186,16 @@ class _MembersPreviewStrip extends StatelessWidget {
 
 class _MemberListTile extends StatelessWidget {
   final SubGroupMember member;
+  final bool isCurrentUserAdmin;
+  final String communityId;
+  final VoidCallback? onRefresh;
 
-  const _MemberListTile({required this.member});
+  const _MemberListTile({
+    required this.member,
+    this.isCurrentUserAdmin = false,
+    this.communityId = '',
+    this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2085,10 +2205,18 @@ class _MemberListTile extends StatelessWidget {
         imageUrl: member.userProfileImage,
         size: 40,
       ),
-      title: Text(
-        member.userName ?? 'Unknown User',
-        style: const TextStyle(
-            fontWeight: FontWeight.w500, fontSize: 15, color: Colors.white),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              member.userName ?? 'Unknown User',
+              style: const TextStyle(
+                  fontWeight: FontWeight.w500, fontSize: 15, color: Colors.white),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // Show admin badge if member is admin (check via role field if available)
+        ],
       ),
       subtitle: member.joinedAt != null
           ? Text(
@@ -2096,11 +2224,90 @@ class _MemberListTile extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: Colors.grey[500]),
             )
           : null,
-      trailing: Icon(Icons.chevron_right, color: Colors.grey[600]),
-      onTap: () {
-        Navigator.of(context).pop(); // close bottom sheet
-        context.push('/user/${member.userId}');
-      },
+      trailing: isCurrentUserAdmin
+          ? PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert, size: 20, color: Colors.grey[500]),
+              color: const Color(0xFF1E1E1E),
+              onSelected: (value) async {
+                if (value == 'view') {
+                  Navigator.of(context).pop();
+                  context.push('/user/${member.userId}');
+                } else if (value == 'chat') {
+                  Navigator.of(context).pop();
+                  context.push('/chat/${member.userId}?name=${Uri.encodeComponent(member.userName ?? '')}');
+                } else if (value == 'make_admin') {
+                  try {
+                    await ApiService().put(
+                      '/partner/communities/$communityId/members/${member.userId}/role',
+                      data: {'role': 'admin'},
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${member.userName} promoted to Admin')),
+                    );
+                    onRefresh?.call();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed: $e')),
+                    );
+                  }
+                } else if (value == 'remove_admin') {
+                  try {
+                    await ApiService().put(
+                      '/partner/communities/$communityId/members/${member.userId}/role',
+                      data: {'role': 'member'},
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${member.userName} demoted to Member')),
+                    );
+                    onRefresh?.call();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed: $e')),
+                    );
+                  }
+                } else if (value == 'kick') {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (d) => AlertDialog(
+                      backgroundColor: const Color(0xFF1E1E1E),
+                      title: const Text('Kick Member', style: TextStyle(color: Colors.white)),
+                      content: Text('Remove ${member.userName} from this community?', style: const TextStyle(color: Colors.white70)),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+                        TextButton(onPressed: () => Navigator.pop(d, true), child: Text('Kick', style: TextStyle(color: Colors.red[400]))),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    try {
+                      await ApiService().delete('/partner/communities/$communityId/members/${member.userId}');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${member.userName} removed')),
+                      );
+                      onRefresh?.call();
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed: $e')),
+                      );
+                    }
+                  }
+                }
+              },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(value: 'view', child: Row(children: [Icon(Icons.person_outline, size: 18, color: Colors.white70), SizedBox(width: 8), Text('View Profile', style: TextStyle(color: Colors.white))])),
+                const PopupMenuItem(value: 'chat', child: Row(children: [Icon(Icons.chat_bubble_outline, size: 18, color: Colors.white70), SizedBox(width: 8), Text('Message', style: TextStyle(color: Colors.white))])),
+                PopupMenuItem(value: 'make_admin', child: Row(children: [Icon(Icons.admin_panel_settings, size: 18, color: AppTheme.primaryColor), SizedBox(width: 8), Text('Make Admin', style: TextStyle(color: AppTheme.primaryColor))])),
+                PopupMenuItem(value: 'remove_admin', child: Row(children: [Icon(Icons.person, size: 18, color: Colors.orange[300]), SizedBox(width: 8), Text('Remove Admin', style: TextStyle(color: Colors.orange[300]))])),
+                PopupMenuItem(value: 'kick', child: Row(children: [Icon(Icons.remove_circle_outline, size: 18, color: Colors.red[400]), SizedBox(width: 8), Text('Kick', style: TextStyle(color: Colors.red[400]))])),
+              ],
+            )
+          : Icon(Icons.chevron_right, color: Colors.grey[600]),
+      onTap: isCurrentUserAdmin
+          ? null
+          : () {
+              Navigator.of(context).pop();
+              context.push('/user/${member.userId}');
+            },
     );
   }
 }

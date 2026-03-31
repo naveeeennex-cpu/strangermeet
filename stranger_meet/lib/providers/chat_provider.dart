@@ -35,10 +35,11 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
 
   ConversationsNotifier(this._api) : super(const ConversationsState());
 
-  Future<void> fetchConversations() async {
-    if (state.isLoading) return;
+  bool _isFetching = false;
 
-    state = state.copyWith(isLoading: true, errorMessage: null);
+  Future<void> fetchConversations() async {
+    if (_isFetching) return;
+    _isFetching = true;
 
     try {
       final response = await _api.get('/messages');
@@ -51,10 +52,15 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
 
       state = ConversationsState(conversations: conversations);
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: e.toString(),
-      );
+      // Don't update state on error if we already have data
+      if (state.conversations.isEmpty) {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: e.toString(),
+        );
+      }
+    } finally {
+      _isFetching = false;
     }
   }
 }

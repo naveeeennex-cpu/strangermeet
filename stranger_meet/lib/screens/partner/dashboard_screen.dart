@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
 import '../../providers/admin_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -150,7 +151,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: _QuickActionButton(
                             icon: Icons.add_circle_outline,
                             label: 'Create Event',
-                            onTap: () => context.push('/partner-communities'),
+                            onTap: () {
+                              final communities = ref.read(adminCommunitiesProvider).communities;
+                              if (communities.isNotEmpty) {
+                                context.push('/partner/community/${communities.first.id}/create-trip?type=event');
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Create a community first')),
+                                );
+                              }
+                            },
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -158,7 +168,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: _QuickActionButton(
                             icon: Icons.terrain_outlined,
                             label: 'Create Trip',
-                            onTap: () => context.push('/partner-communities'),
+                            onTap: () {
+                              final communities = ref.read(adminCommunitiesProvider).communities;
+                              if (communities.isNotEmpty) {
+                                context.push('/partner/community/${communities.first.id}/create-trip?type=trip');
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Create a community first')),
+                                );
+                              }
+                            },
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -167,11 +186,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             icon: Icons.people_outline,
                             label: 'Members',
                             onTap: () {
-                              final communities =
-                                  ref.read(adminCommunitiesProvider).communities;
+                              final communities = ref.read(adminCommunitiesProvider).communities;
                               if (communities.isNotEmpty) {
-                                context.push(
-                                    '/partner/community/${communities.first.id}/manage');
+                                _showMembersList(context, communities.first.id);
                               } else {
                                 context.push('/partner-communities');
                               }
@@ -517,6 +534,208 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showMembersList(BuildContext context, String communityId) async {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor ?? const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          expand: false,
+          builder: (ctx2, scrollController) {
+            return FutureBuilder(
+              future: ref.read(adminCommunitiesProvider.notifier).fetchMembers(communityId),
+              builder: (context, snapshot) {
+                return Column(
+                  children: [
+                    Container(
+                      width: 40, height: 4,
+                      margin: const EdgeInsets.only(top: 12, bottom: 16),
+                      decoration: BoxDecoration(color: Colors.grey[600], borderRadius: BorderRadius.circular(2)),
+                    ),
+                    Text('Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                    const SizedBox(height: 12),
+                    if (snapshot.connectionState == ConnectionState.waiting)
+                      const Expanded(child: Center(child: CircularProgressIndicator()))
+                    else if (snapshot.hasData)
+                      Expanded(
+                        child: ListView.builder(
+                          controller: scrollController,
+                          itemCount: snapshot.data!.length,
+                          itemBuilder: (ctx3, index) {
+                            final member = snapshot.data![index];
+                            final isAdmin = member.memberRole == 'admin';
+                            return ListTile(
+                              leading: CircleAvatar(
+                                radius: 20,
+                                backgroundImage: member.profileImageUrl != null && member.profileImageUrl!.isNotEmpty
+                                    ? CachedNetworkImageProvider(member.profileImageUrl!)
+                                    : null,
+                                child: member.profileImageUrl == null || member.profileImageUrl!.isEmpty
+                                    ? Text(member.name.isNotEmpty ? member.name[0].toUpperCase() : '?')
+                                    : null,
+                              ),
+                              title: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(member.name, style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color), overflow: TextOverflow.ellipsis),
+                                  ),
+                                  if (isAdmin) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primaryColor.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text('Admin', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppTheme.primaryColor)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              subtitle: Text(member.email, style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color)),
+                              trailing: index == 0
+                                  ? IconButton(
+                                      icon: const Icon(Icons.chat_bubble_outline, size: 20),
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        context.push('/chat/${member.id}?name=${Uri.encodeComponent(member.name)}');
+                                      },
+                                    )
+                                  : PopupMenuButton<String>(
+                                      icon: Icon(Icons.more_vert, size: 20, color: Theme.of(context).textTheme.bodySmall?.color),
+                                      color: Theme.of(context).bottomSheetTheme.backgroundColor ?? const Color(0xFF1E1E1E),
+                                      onSelected: (value) async {
+                                        if (value == 'chat') {
+                                          Navigator.pop(ctx);
+                                          context.push('/chat/${member.id}?name=${Uri.encodeComponent(member.name)}');
+                                        } else if (value == 'make_admin') {
+                                          try {
+                                            await ApiService().put(
+                                              '/partner/communities/$communityId/members/${member.id}/role',
+                                              data: {'role': 'admin'},
+                                            );
+                                            Navigator.pop(ctx);
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('${member.name} promoted to Admin')),
+                                            );
+                                          } catch (e) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Failed: $e')),
+                                            );
+                                          }
+                                        } else if (value == 'remove_admin') {
+                                          try {
+                                            await ApiService().put(
+                                              '/partner/communities/$communityId/members/${member.id}/role',
+                                              data: {'role': 'member'},
+                                            );
+                                            Navigator.pop(ctx);
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('${member.name} demoted to Member')),
+                                            );
+                                          } catch (e) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Failed: $e')),
+                                            );
+                                          }
+                                        } else if (value == 'kick') {
+                                          final confirm = await showDialog<bool>(
+                                            context: ctx3,
+                                            builder: (d) => AlertDialog(
+                                              title: const Text('Kick Member'),
+                                              content: Text('Remove ${member.name} from this community?'),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(d, true),
+                                                  child: Text('Kick', style: TextStyle(color: Colors.red[400])),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (confirm == true) {
+                                            try {
+                                              await ref.read(adminCommunitiesProvider.notifier).kickMember(communityId, member.id);
+                                              Navigator.pop(ctx);
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('${member.name} removed')),
+                                              );
+                                            } catch (e) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('Failed: $e')),
+                                              );
+                                            }
+                                          }
+                                        }
+                                      },
+                                      itemBuilder: (ctx4) => [
+                                        PopupMenuItem(
+                                          value: 'chat',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.chat_bubble_outline, size: 18, color: Theme.of(context).textTheme.bodyLarge?.color),
+                                              const SizedBox(width: 8),
+                                              Text('Chat', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color)),
+                                            ],
+                                          ),
+                                        ),
+                                        if (!isAdmin)
+                                          PopupMenuItem(
+                                            value: 'make_admin',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.admin_panel_settings, size: 18, color: AppTheme.primaryColor),
+                                                const SizedBox(width: 8),
+                                                Text('Make Admin', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color)),
+                                              ],
+                                            ),
+                                          )
+                                        else
+                                          PopupMenuItem(
+                                            value: 'remove_admin',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.person_outline, size: 18, color: Theme.of(context).textTheme.bodyLarge?.color),
+                                                const SizedBox(width: 8),
+                                                Text('Remove Admin', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color)),
+                                              ],
+                                            ),
+                                          ),
+                                        PopupMenuItem(
+                                          value: 'kick',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.remove_circle, size: 18, color: Colors.red[400]),
+                                              const SizedBox(width: 8),
+                                              Text('Kick', style: TextStyle(color: Colors.red[400])),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            );
+                          },
+                        ),
+                      )
+                    else
+                      const Expanded(child: Center(child: Text('No members'))),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

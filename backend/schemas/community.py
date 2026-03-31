@@ -80,6 +80,7 @@ class SubGroupResponse(BaseModel):
     description: str = ""
     type: str = "general"
     is_private: bool = False
+    admin_only_chat: bool = False
     created_by: str
     creator_name: Optional[str] = None
     members_count: int = 0

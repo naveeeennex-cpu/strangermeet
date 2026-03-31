@@ -551,6 +551,10 @@ async def init_db():
                 END $$;
             """)
 
+        # Admin-only chat mode for communities and sub-groups
+        await conn.execute("ALTER TABLE communities ADD COLUMN IF NOT EXISTS admin_only_chat BOOLEAN DEFAULT false")
+        await conn.execute("ALTER TABLE sub_groups ADD COLUMN IF NOT EXISTS admin_only_chat BOOLEAN DEFAULT false")
+
 
 async def seed_demo_data():
     """Insert demo users, posts, and events if the DB is empty."""

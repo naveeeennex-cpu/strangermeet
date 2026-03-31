@@ -28,7 +28,7 @@ class _CommunityDetailScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     Future.microtask(() {
       ref
           .read(communityDetailProvider(widget.communityId).notifier)
@@ -322,6 +322,7 @@ class _CommunityDetailScreenState
                     Tab(text: 'Posts'),
                     Tab(text: 'Groups'),
                     Tab(text: 'Events'),
+                    Tab(text: 'Memories'),
                   ],
                 ),
               ),
@@ -335,6 +336,7 @@ class _CommunityDetailScreenState
             _PostsTab(communityId: widget.communityId),
             _GroupsTab(communityId: widget.communityId),
             _EventsTab(communityId: widget.communityId),
+            _MemoriesTab(communityId: widget.communityId),
           ],
         ),
       ),
@@ -1564,4 +1566,372 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_SliverTabBarDelegate oldDelegate) => false;
+}
+
+// ── Memories Tab — flat photo grid ────────────────────────────────────────
+
+class _MemoriesTab extends StatefulWidget {
+  final String communityId;
+  const _MemoriesTab({required this.communityId});
+
+  @override
+  State<_MemoriesTab> createState() => _MemoriesTabState();
+}
+
+class _MemoryPhoto {
+  final String id;
+  final String mediaUrl;
+  final String mediaType;
+  final String userName;
+  final String? userImage;
+  final String eventTitle;
+  final String eventType;
+  final DateTime? eventDate;
+  final String caption;
+  final DateTime? createdAt;
+
+  _MemoryPhoto({
+    required this.id,
+    required this.mediaUrl,
+    this.mediaType = 'image',
+    required this.userName,
+    this.userImage,
+    required this.eventTitle,
+    this.eventType = 'event',
+    this.eventDate,
+    this.caption = '',
+    this.createdAt,
+  });
+}
+
+class _MemoriesTabState extends State<_MemoriesTab> {
+  List<_MemoryPhoto> _allPhotos = [];
+  List<Map<String, dynamic>> _pastEventsList = []; // for filter dropdown
+  bool _isLoading = true;
+  String? _selectedEventId; // null = all
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAllMemories();
+  }
+
+  Future<void> _fetchAllMemories() async {
+    try {
+      // Get all events for this community
+      final response = await ApiService().get('/communities/${widget.communityId}/events');
+      final data = response.data;
+      final List<dynamic> events = data is List ? data : [];
+
+      final now = DateTime.now();
+      final pastEvents = events.cast<Map<String, dynamic>>().where((e) {
+        final dateStr = e['date']?.toString();
+        if (dateStr == null) return false;
+        final date = DateTime.tryParse(dateStr);
+        return date != null && date.isBefore(now);
+      }).toList();
+
+      // Fetch memories for each past event
+      final List<_MemoryPhoto> allPhotos = [];
+      for (final event in pastEvents) {
+        final eventId = event['id']?.toString() ?? '';
+        final eventTitle = event['title']?.toString() ?? '';
+        final eventType = event['event_type']?.toString() ?? 'event';
+        final eventDateStr = event['date']?.toString();
+        final eventDate = eventDateStr != null ? DateTime.tryParse(eventDateStr) : null;
+
+        try {
+          final memResp = await ApiService().get('/bookings/events/$eventId/memories');
+          final memData = memResp.data;
+          final List<dynamic> memories = memData is List ? memData : [];
+
+          for (final m in memories) {
+            allPhotos.add(_MemoryPhoto(
+              id: m['id']?.toString() ?? '',
+              mediaUrl: m['media_url']?.toString() ?? '',
+              mediaType: m['media_type']?.toString() ?? 'image',
+              userName: m['user_name']?.toString() ?? '',
+              userImage: m['user_profile_image']?.toString(),
+              eventTitle: eventTitle,
+              eventType: eventType,
+              eventDate: eventDate,
+              caption: m['caption']?.toString() ?? '',
+              createdAt: m['created_at'] != null ? DateTime.tryParse(m['created_at'].toString()) : null,
+            ));
+          }
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          _allPhotos = allPhotos;
+          _pastEventsList = pastEvents;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  List<_MemoryPhoto> get _filteredPhotos {
+    if (_selectedEventId == null) return _allPhotos;
+    return _allPhotos.where((p) {
+      // Match by event title since we don't have event_id in _MemoryPhoto
+      final matchEvent = _pastEventsList.firstWhere(
+        (e) => e['id']?.toString() == _selectedEventId,
+        orElse: () => {},
+      );
+      return matchEvent.isNotEmpty && p.eventTitle == matchEvent['title'];
+    }).toList();
+  }
+
+  String get _filterLabel {
+    if (_selectedEventId == null) return 'All Events';
+    final event = _pastEventsList.firstWhere(
+      (e) => e['id']?.toString() == _selectedEventId,
+      orElse: () => {},
+    );
+    return event['title']?.toString() ?? 'All Events';
+  }
+
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor ?? const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                decoration: BoxDecoration(color: Colors.grey[600], borderRadius: BorderRadius.circular(2)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text('Filter by Event', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).textTheme.bodyLarge?.color)),
+              ),
+              const SizedBox(height: 12),
+              // All option
+              ListTile(
+                leading: Icon(Icons.photo_library, color: _selectedEventId == null ? AppTheme.primaryColor : Colors.grey),
+                title: Text('All Events', style: TextStyle(fontWeight: _selectedEventId == null ? FontWeight.w700 : FontWeight.w400, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                trailing: _selectedEventId == null ? Icon(Icons.check_circle, color: AppTheme.primaryColor, size: 20) : null,
+                subtitle: Text('${_allPhotos.length} photos', style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color)),
+                onTap: () {
+                  setState(() => _selectedEventId = null);
+                  Navigator.pop(ctx);
+                },
+              ),
+              const Divider(height: 1),
+              // Each event
+              ...(_pastEventsList.map((event) {
+                final eventId = event['id']?.toString() ?? '';
+                final title = event['title']?.toString() ?? '';
+                final eventType = event['event_type']?.toString() ?? 'event';
+                final isTrip = eventType == 'trip';
+                final dateStr = event['date']?.toString();
+                final date = dateStr != null ? DateTime.tryParse(dateStr) : null;
+                final photoCount = _allPhotos.where((p) => p.eventTitle == title).length;
+                final isSelected = _selectedEventId == eventId;
+
+                return ListTile(
+                  leading: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: isTrip ? Colors.deepOrange.withOpacity(0.15) : Colors.blue.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isTrip ? Icons.terrain : Icons.event,
+                      color: isTrip ? Colors.deepOrange : Colors.blue,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(title, style: TextStyle(fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500, fontSize: 14, color: Theme.of(context).textTheme.bodyLarge?.color)),
+                  subtitle: Row(
+                    children: [
+                      if (date != null) Text(DateFormat('MMM d').format(date), style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color)),
+                      if (date != null) const SizedBox(width: 8),
+                      Text('$photoCount photos', style: TextStyle(fontSize: 11, color: AppTheme.primaryColor)),
+                    ],
+                  ),
+                  trailing: isSelected ? Icon(Icons.check_circle, color: AppTheme.primaryColor, size: 20) : null,
+                  onTap: () {
+                    setState(() => _selectedEventId = eventId);
+                    Navigator.pop(ctx);
+                  },
+                );
+              })),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _openFullScreen(_MemoryPhoto photo) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black87,
+        pageBuilder: (ctx, _, __) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(photo.eventTitle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                Text(photo.userName, style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+              ],
+            ),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              child: CachedNetworkImage(imageUrl: photo.mediaUrl, fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_allPhotos.isEmpty) {
+      return Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.photo_library_outlined, size: 56, color: Theme.of(context).textTheme.bodySmall?.color),
+              const SizedBox(height: 12),
+              Text('No memories yet', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text('Memories appear after events end', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6), fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final photos = _filteredPhotos;
+
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          // Filter bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: GestureDetector(
+              onTap: _showFilterSheet,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.filter_list, size: 18, color: AppTheme.primaryColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _filterLabel,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${photos.length} photos',
+                      style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.keyboard_arrow_down, size: 20, color: Theme.of(context).textTheme.bodySmall?.color),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Photo grid
+          Expanded(
+            child: photos.isEmpty
+                ? Center(child: Text('No photos', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color)))
+                : GridView.builder(
+                    padding: const EdgeInsets.all(2),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 2,
+                      mainAxisSpacing: 2,
+                    ),
+                    itemCount: photos.length,
+                    itemBuilder: (context, index) {
+                      final photo = photos[index];
+                      return GestureDetector(
+                        onTap: () => _openFullScreen(photo),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            CachedNetworkImage(
+                              imageUrl: photo.mediaUrl,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) => Container(color: Theme.of(context).colorScheme.surface),
+                              errorWidget: (_, __, ___) => Container(
+                                color: Theme.of(context).colorScheme.surface,
+                                child: const Icon(Icons.broken_image_outlined, size: 24),
+                              ),
+                            ),
+                            // Event name overlay at bottom
+                            Positioned(
+                              bottom: 0, left: 0, right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                    colors: [Colors.black54, Colors.transparent],
+                                  ),
+                                ),
+                                child: Text(
+                                  photo.eventTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
 }

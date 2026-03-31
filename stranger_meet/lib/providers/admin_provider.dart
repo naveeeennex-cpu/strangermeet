@@ -188,6 +188,7 @@ class AdminCommunitiesNotifier extends StateNotifier<AdminCommunitiesState> {
         name: m['user_name'] ?? m['name'] ?? '',
         email: m['user_email'] ?? m['email'] ?? '',
         profileImageUrl: m['user_profile_image'] ?? m['profile_image_url'],
+        memberRole: m['role'] ?? 'member',
       );
     }).toList();
   }
