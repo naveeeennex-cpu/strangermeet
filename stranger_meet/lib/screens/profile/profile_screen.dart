@@ -683,7 +683,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       );
     }
 
-    return CustomScrollView(
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: CustomScrollView(
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.all(2),
@@ -766,6 +768,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 80)),
       ],
+    ),
     );
   }
 

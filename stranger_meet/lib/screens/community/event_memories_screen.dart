@@ -63,10 +63,11 @@ class _EventMemoriesScreenState extends ConsumerState<EventMemoriesScreen> {
     try {
       final bytes = await picked.readAsBytes();
       final formData = FormData.fromMap({
-        'image': MultipartFile.fromBytes(bytes, filename: picked.name),
+        'file': MultipartFile.fromBytes(bytes, filename: picked.name),
+        'folder': 'memories',
       });
       final uploadResp =
-          await ApiService().uploadFile('/upload/image', formData: formData);
+          await ApiService().uploadFile('/upload', formData: formData);
       final url = uploadResp.data['url'];
 
       await ApiService()
