@@ -36,12 +36,14 @@ class _CommunityEventDetailScreenState
   int _lastTabCount = 0;
   CommunityEvent? _fetchedEvent;
   bool _isFetchingEvent = false;
+  bool _isSaved = false;
 
   @override
   void initState() {
     super.initState();
     _fetchParticipants();
     _ensureEventLoaded();
+    _checkIfSaved();
     Future.microtask(() {
       ref
           .read(eventItineraryProvider(
@@ -71,6 +73,32 @@ class _CommunityEventDetailScreenState
         await ref.read(communityEventsProvider(widget.communityId).notifier).fetchEvents();
       } catch (_) {}
       if (mounted) setState(() => _isFetchingEvent = false);
+    }
+  }
+
+  Future<void> _checkIfSaved() async {
+    try {
+      final res = await ApiService().get('/bookings/saved/check/${widget.eventId}');
+      if (mounted) setState(() => _isSaved = res.data['is_saved'] == true);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleSave() async {
+    final wasSaved = _isSaved;
+    setState(() => _isSaved = !wasSaved);
+    final event = _getEvent();
+    final itemType = (event != null && event.isTrip) ? 'trip' : 'event';
+    try {
+      if (wasSaved) {
+        await ApiService().delete('/bookings/saved/${widget.eventId}');
+      } else {
+        await ApiService().post('/bookings/saved', data: {
+          'item_id': widget.eventId,
+          'item_type': itemType,
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isSaved = wasSaved);
     }
   }
 
@@ -208,15 +236,22 @@ class _CommunityEventDetailScreenState
         ),
         centerTitle: true,
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              shape: BoxShape.circle,
+          GestureDetector(
+            onTap: _toggleSave,
+            child: Container(
+              margin: const EdgeInsets.only(right: 12),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isSaved ? Icons.bookmark : Icons.bookmark_border,
+                color: _isSaved ? AppTheme.primaryColor : Theme.of(context).textTheme.bodySmall?.color,
+                size: 20,
+              ),
             ),
-            child: Icon(Icons.favorite_border, color: Theme.of(context).textTheme.bodySmall?.color, size: 20),
           ),
         ],
         bottom: TabBar(
@@ -1254,10 +1289,47 @@ class _DetailGridCard extends StatelessWidget {
 
 // ── Overview Tab (non-trip events) ────────────────────────────────
 
-class _OverviewTab extends StatelessWidget {
+class _OverviewTab extends StatefulWidget {
   final CommunityEvent event;
 
   const _OverviewTab({required this.event});
+
+  @override
+  State<_OverviewTab> createState() => _OverviewTabState();
+}
+
+class _OverviewTabState extends State<_OverviewTab> {
+  int _memoriesCount = 0;
+  List<Map<String, dynamic>> _memoryPreviews = [];
+  bool _loadedMemories = false;
+
+  CommunityEvent get event => widget.event;
+
+  @override
+  void initState() {
+    super.initState();
+    if (event.date.isBefore(DateTime.now())) {
+      _fetchMemoriesPreview();
+    }
+  }
+
+  Future<void> _fetchMemoriesPreview() async {
+    try {
+      final response = await ApiService()
+          .get('/bookings/events/${event.id}/memories');
+      final data = response.data;
+      if (mounted) {
+        final list = (data is List ? data : []).cast<Map<String, dynamic>>();
+        setState(() {
+          _memoriesCount = list.length;
+          _memoryPreviews = list.take(4).toList();
+          _loadedMemories = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadedMemories = true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1471,6 +1543,125 @@ class _OverviewTab extends StatelessWidget {
               ],
             ),
           ),
+        ],
+
+        // Event Memories section (past events only)
+        if (event.date.isBefore(DateTime.now()) && _loadedMemories) ...[
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.photo_library, size: 20, color: AppTheme.primaryColor),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Memories',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_memoriesCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '$_memoriesCount',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.primaryColor),
+                      ),
+                    ),
+                ],
+              ),
+              if (_memoriesCount > 0)
+                GestureDetector(
+                  onTap: () {
+                    final encodedTitle = Uri.encodeComponent(event.title);
+                    final canUpload = event.isJoined ? 'true' : 'false';
+                    context.push('/event/${event.id}/memories?title=$encodedTitle&canUpload=$canUpload');
+                  },
+                  child: Row(
+                    children: [
+                      Text('View All', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.chevron_right, size: 18, color: AppTheme.primaryColor),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_memoryPreviews.isNotEmpty)
+            SizedBox(
+              height: 100,
+              child: Row(
+                children: [
+                  ..._memoryPreviews.map((m) => Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: GestureDetector(
+                        onTap: () {
+                          final encodedTitle = Uri.encodeComponent(event.title);
+                          final canUpload = event.isJoined ? 'true' : 'false';
+                          context.push('/event/${event.id}/memories?title=$encodedTitle&canUpload=$canUpload');
+                        },
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: CachedNetworkImage(
+                            imageUrl: m['media_url'] ?? '',
+                            height: 100,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(
+                              color: Theme.of(context).colorScheme.surface,
+                              child: const Icon(Icons.broken_image_outlined, size: 20),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )),
+                  // Fill remaining slots if fewer than 4
+                  ...List.generate(
+                    (4 - _memoryPreviews.length).clamp(0, 4),
+                    (_) => Expanded(child: Container()),
+                  ),
+                ],
+              ),
+            )
+          else
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.photo_library_outlined, size: 40, color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.3)),
+                  const SizedBox(height: 8),
+                  Text('No memories yet', style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodySmall?.color)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          if (event.isJoined)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  final encodedTitle = Uri.encodeComponent(event.title);
+                  context.push('/event/${event.id}/memories?title=$encodedTitle&canUpload=true');
+                },
+                icon: const Icon(Icons.add_photo_alternate, size: 18),
+                label: const Text('Add Photos'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                  side: const BorderSide(color: AppTheme.primaryColor),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
         ],
 
         const SizedBox(height: 100),

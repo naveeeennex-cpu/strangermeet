@@ -679,10 +679,49 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
 
 // ── Event/Trip Card ──────────────────────────────────────────────────────────
 
-class _EventCard extends StatelessWidget {
+class _EventCard extends StatefulWidget {
   final CommunityEvent event;
 
   const _EventCard({required this.event});
+
+  @override
+  State<_EventCard> createState() => _EventCardState();
+}
+
+class _EventCardState extends State<_EventCard> {
+  bool _isSaved = false;
+
+  CommunityEvent get event => widget.event;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfSaved();
+  }
+
+  Future<void> _checkIfSaved() async {
+    try {
+      final res = await ApiService().get('/bookings/saved/check/${event.id}');
+      if (mounted) setState(() => _isSaved = res.data['is_saved'] == true);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleSave() async {
+    final wasSaved = _isSaved;
+    setState(() => _isSaved = !wasSaved);
+    try {
+      if (wasSaved) {
+        await ApiService().delete('/bookings/saved/${event.id}');
+      } else {
+        await ApiService().post('/bookings/saved', data: {
+          'item_id': event.id,
+          'item_type': event.isTrip ? 'trip' : 'event',
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isSaved = wasSaved);
+    }
+  }
 
   Color _difficultyColor(String d) {
     switch (d.toLowerCase()) {
@@ -828,18 +867,25 @@ class _EventCard extends StatelessWidget {
                 ),
               ),
 
-              // ── Heart Icon ──
+              // ── Bookmark Icon ──
               Positioned(
                 top: 16,
                 right: 16,
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
-                    shape: BoxShape.circle,
+                child: GestureDetector(
+                  onTap: _toggleSave,
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _isSaved ? Icons.bookmark : Icons.bookmark_border,
+                      color: _isSaved ? AppTheme.primaryColor : Colors.white,
+                      size: 20,
+                    ),
                   ),
-                  child: const Icon(Icons.favorite_border, color: Colors.white, size: 20),
                 ),
               ),
 

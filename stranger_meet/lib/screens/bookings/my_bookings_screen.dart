@@ -540,24 +540,46 @@ class _BookingCard extends StatelessWidget {
                         ),
                     ],
                   ),
-                  // Rate & Review button for past events
+                  // Rate & Review + Memories buttons for past events
                   if (isPast) ...[
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showReviewDialog(context, eventId),
-                        icon: const Icon(Icons.star_outline, size: 18),
-                        label: const Text('Rate & Review'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.amber[700],
-                          side: BorderSide(color: Colors.amber[300]!),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showReviewDialog(context, eventId),
+                            icon: const Icon(Icons.star_outline, size: 18),
+                            label: const Text('Review'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.amber[700],
+                              side: BorderSide(color: Colors.amber[300]!),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              final encodedTitle = Uri.encodeComponent(title);
+                              context.push('/event/$eventId/memories?title=$encodedTitle&canUpload=true');
+                            },
+                            icon: const Icon(Icons.photo_library_outlined, size: 18),
+                            label: const Text('Memories'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.primaryColor,
+                              side: const BorderSide(color: AppTheme.primaryColor),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],

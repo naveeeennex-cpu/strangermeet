@@ -40,6 +40,8 @@ import '../screens/partner/event_enrollments_screen.dart';
 import '../screens/partner/trip_manage_screen.dart';
 import '../screens/partner/create_trip_screen.dart';
 import '../screens/events/event_detail_screen.dart';
+import '../screens/community/event_memories_screen.dart';
+import '../screens/saved/my_saved_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -116,6 +118,11 @@ final router = GoRouter(
       path: '/profile',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: '/saved',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const MySavedScreen(),
     ),
 
     // Partner ShellRoute
@@ -269,6 +276,15 @@ final router = GoRouter(
         communityId: state.pathParameters['cid']!,
         eventId: state.pathParameters['eid'],
         eventType: state.uri.queryParameters['type'] ?? 'trip',
+      ),
+    ),
+    GoRoute(
+      path: '/event/:eid/memories',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => EventMemoriesScreen(
+        eventId: state.pathParameters['eid']!,
+        eventTitle: state.uri.queryParameters['title'] ?? 'Memories',
+        canUpload: state.uri.queryParameters['canUpload'] == 'true',
       ),
     ),
     GoRoute(

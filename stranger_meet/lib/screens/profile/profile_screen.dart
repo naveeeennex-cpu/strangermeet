@@ -170,6 +170,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             onSelected: (value) {
               if (value == 'settings') {
                 context.push('/edit-profile');
+              } else if (value == 'saved') {
+                context.push('/saved');
               } else if (value == 'dark_mode') {
                 ref.read(themeProvider.notifier).toggleTheme();
               } else if (value == 'logout') {
@@ -186,6 +188,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       Icon(Icons.settings_outlined, size: 20),
                       SizedBox(width: 12),
                       Text('Settings'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'saved',
+                  child: Row(
+                    children: [
+                      Icon(Icons.bookmark_outline, size: 20),
+                      SizedBox(width: 12),
+                      Text('Saved'),
                     ],
                   ),
                 ),
@@ -424,45 +436,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               // -- Stats Card --
               SliverToBoxAdapter(
                 child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 24),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
                   decoration: BoxDecoration(
                     color: Theme.of(context).cardTheme.color ??
                         Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        GestureDetector(
-                          onTap: () => _showFriendsList(context, friendState.friends),
-                          child: _buildStat(
-                            friendState.friends.length,
-                            'Friends',
-                          ),
-                        ),
-                        VerticalDivider(
-                          width: 1,
-                          thickness: 1,
-                          color: Theme.of(context).dividerColor,
-                        ),
-                        _buildStat(_communityCount, 'Communities'),
-                        VerticalDivider(
-                          width: 1,
-                          thickness: 1,
-                          color: Theme.of(context).dividerColor,
-                        ),
-                        _buildStat(_postCount, 'Posts'),
-                      ],
+                    border: Border.all(
+                      color: Theme.of(context).dividerColor.withOpacity(0.5),
                     ),
+                  ),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => _showFriendsList(context, friendState.friends),
+                        child: _buildStat(
+                          friendState.friends.length,
+                          'Friends',
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 36,
+                        color: Theme.of(context).dividerColor,
+                      ),
+                      _buildStat(_communityCount, 'Communities'),
+                      Container(
+                        width: 1,
+                        height: 36,
+                        color: Theme.of(context).dividerColor,
+                      ),
+                      _buildStat(_postCount, 'Posts'),
+                    ],
                   ),
                 ),
               ),
@@ -623,20 +628,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     return Expanded(
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             formatted,
             style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
               color: Theme.of(context).textTheme.bodyLarge?.color,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
               color: Theme.of(context).textTheme.bodySmall?.color,
             ),
           ),
@@ -757,25 +764,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             ),
           ),
         ),
-        // Logout button at the bottom
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 32),
-            child: Center(
-              child: TextButton(
-                onPressed: _handleLogout,
-                child: const Text(
-                  'Log Out',
-                  style: TextStyle(
-                    color: AppTheme.errorColor,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
       ],
     );
   }
@@ -816,23 +805,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       itemCount: _communities.length + 1, // +1 for logout button
       itemBuilder: (context, index) {
         if (index == _communities.length) {
-          // Logout at the bottom
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Center(
-              child: TextButton(
-                onPressed: _handleLogout,
-                child: const Text(
-                  'Log Out',
-                  style: TextStyle(
-                    color: AppTheme.errorColor,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          );
+          return const SizedBox(height: 80);
         }
 
         final c = _communities[index];

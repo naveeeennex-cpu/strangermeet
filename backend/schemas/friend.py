@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -16,6 +16,7 @@ class FriendRequestResponse(BaseModel):
     requester_image: Optional[str] = None
     addressee_name: Optional[str] = None
     addressee_image: Optional[str] = None
+    communities: List[str] = []
     created_at: datetime
 
 

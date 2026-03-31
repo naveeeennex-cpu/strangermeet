@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -7,6 +8,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../config/theme.dart';
 import '../../providers/chat_provider.dart';
 import '../../models/message.dart';
+import '../../services/websocket_service.dart';
 
 class ConversationsScreen extends ConsumerStatefulWidget {
   const ConversationsScreen({super.key});
@@ -19,17 +21,37 @@ class ConversationsScreen extends ConsumerStatefulWidget {
 class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
   final _searchController = TextEditingController();
   int _selectedTab = 0; // 0 = Communities, 1 = People
+  StreamSubscription? _wsSubscription;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(conversationsProvider.notifier).fetchConversations(),
-    );
+    _refreshConversations();
+
+    // Listen for new messages via WebSocket → refresh list
+    _wsSubscription = WebSocketService().messageStream.listen((data) {
+      if (!mounted) return;
+      final type = data['type']?.toString() ?? '';
+      if (type == 'message' || type == 'group_message') {
+        _refreshConversations();
+      }
+    });
+
+    // Periodic refresh every 5 seconds (catches any missed updates)
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) _refreshConversations();
+    });
+  }
+
+  void _refreshConversations() {
+    ref.read(conversationsProvider.notifier).fetchConversations();
   }
 
   @override
   void dispose() {
+    _wsSubscription?.cancel();
+    _refreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }

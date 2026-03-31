@@ -515,6 +515,29 @@ async def init_db():
             );
         """)
 
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS event_memories (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                event_id UUID NOT NULL REFERENCES community_events(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                media_url TEXT NOT NULL,
+                media_type VARCHAR(20) DEFAULT 'image',
+                caption TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS saved_items (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                item_id TEXT NOT NULL,
+                item_type VARCHAR(20) NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(user_id, item_id, item_type)
+            );
+        """)
+
         # Video support migration for posts and stories
         for col_sql in [
             "ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type VARCHAR(10) DEFAULT 'image'",

@@ -228,6 +228,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
         final name = req['requester_name'] ?? 'Unknown';
         final image = req['requester_image'];
         final requestId = req['id']?.toString() ?? '';
+        final requesterId = req['requester_id']?.toString() ?? '';
+        final communities = (req['communities'] as List?)?.cast<String>() ?? [];
         final createdAt = req['created_at'] != null
             ? DateTime.tryParse(req['created_at'])
             : null;
@@ -242,34 +244,61 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
           ),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Theme.of(context).colorScheme.surface,
-                backgroundImage: image != null && image.toString().isNotEmpty
-                    ? CachedNetworkImageProvider(image.toString())
-                    : null,
-                child: image == null || image.toString().isEmpty
-                    ? Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : '?',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 18,
-                        ),
-                      )
-                    : null,
+              GestureDetector(
+                onTap: () => context.push('/user/$requesterId'),
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  backgroundImage: image != null && image.toString().isNotEmpty
+                      ? CachedNetworkImageProvider(image.toString())
+                      : null,
+                  child: image == null || image.toString().isEmpty
+                      ? Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                          ),
+                        )
+                      : null,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
+                    GestureDetector(
+                      onTap: () => context.push('/user/$requesterId'),
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
+                    if (communities.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(Icons.people_outline, size: 12, color: AppTheme.primaryColor),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              communities.join(', '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppTheme.primaryColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 2),
                     Text(
                       createdAt != null
@@ -364,9 +393,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
       itemCount: _chatNotifications.length,
       itemBuilder: (context, index) {
         final chat = _chatNotifications[index];
-        final senderName = chat['sender_name'] ?? 'Unknown';
-        final message = chat['message'] ?? '';
-        final senderId = chat['sender_id']?.toString() ?? '';
+        final senderName = chat['sender_name'] ?? chat['user_name'] ?? chat['partner_name'] ?? 'Unknown';
+        final message = chat['message'] ?? chat['last_message'] ?? '';
+        final senderId = chat['sender_id']?.toString() ?? chat['user_id']?.toString() ?? '';
         final receiverId = chat['receiver_id']?.toString() ?? '';
         final timestamp = chat['timestamp'] != null
             ? DateTime.tryParse(chat['timestamp'])

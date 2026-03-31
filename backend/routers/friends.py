@@ -237,20 +237,31 @@ async def get_pending_requests(
         user_id
     )
 
-    return [
-        FriendRequestResponse(
-            id=str(row["id"]),
-            requester_id=str(row["requester_id"]),
-            addressee_id=str(row["addressee_id"]),
-            status=row["status"],
-            requester_name=row["requester_name"],
-            requester_image=row.get("requester_image"),
-            addressee_name=row["addressee_name"],
-            addressee_image=row.get("addressee_image"),
-            created_at=row["created_at"],
+    results = []
+    for row in rows:
+        req_id = str(row["requester_id"])
+        comm_rows = await pool.fetch(
+            """SELECT c.name FROM community_members cm
+               JOIN communities c ON cm.community_id = c.id
+               WHERE cm.user_id = $1 AND cm.status = 'active' LIMIT 3""",
+            req_id
         )
-        for row in rows
-    ]
+        communities = [r["name"] for r in comm_rows]
+        results.append(
+            FriendRequestResponse(
+                id=str(row["id"]),
+                requester_id=req_id,
+                addressee_id=str(row["addressee_id"]),
+                status=row["status"],
+                requester_name=row["requester_name"],
+                requester_image=row.get("requester_image"),
+                addressee_name=row["addressee_name"],
+                addressee_image=row.get("addressee_image"),
+                communities=communities,
+                created_at=row["created_at"],
+            )
+        )
+    return results
 
 
 @router.get("/sent", response_model=List[FriendRequestResponse])

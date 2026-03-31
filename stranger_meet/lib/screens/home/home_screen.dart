@@ -37,10 +37,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Future.microtask(() {
       ref.read(postsProvider.notifier).fetchPosts(refresh: true);
       ref.read(storiesProvider.notifier).fetchStories();
+      ref.read(friendProvider.notifier).fetchFriends();
       ref.read(friendProvider.notifier).fetchPendingRequests();
+      ref.read(friendProvider.notifier).fetchSentRequests();
       ref.read(unreadCountProvider.notifier).fetchUnreadCount();
     });
     _scrollController.addListener(_onScroll);
+    _loadSentRequests();
+  }
+
+  Future<void> _loadSentRequests() async {
+    try {
+      final response = await ApiService().get('/friends/sent');
+      final data = response.data;
+      final List<dynamic> results = data is List ? data : (data['results'] ?? []);
+      if (mounted) {
+        setState(() {
+          for (final r in results) {
+            final addresseeId = r['addressee_id']?.toString() ?? r['user_id']?.toString() ?? '';
+            if (addresseeId.isNotEmpty) {
+              _sentRequests.add(addresseeId);
+            }
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -1084,6 +1105,38 @@ class _PostCard extends ConsumerStatefulWidget {
 class _PostCardState extends ConsumerState<_PostCard>
     with SingleTickerProviderStateMixin {
   bool _showHeart = false;
+  bool _isSaved = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfSaved();
+  }
+
+  Future<void> _checkIfSaved() async {
+    try {
+      final res = await ApiService().get('/bookings/saved/check/${widget.post.id}');
+      if (mounted) setState(() => _isSaved = res.data['is_saved'] == true);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleSave() async {
+    final postId = widget.post.id;
+    final wasSaved = _isSaved;
+    setState(() => _isSaved = !wasSaved);
+    try {
+      if (wasSaved) {
+        await ApiService().delete('/bookings/saved/$postId');
+      } else {
+        await ApiService().post('/bookings/saved', data: {
+          'item_id': postId,
+          'item_type': 'post',
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isSaved = wasSaved);
+    }
+  }
 
   void _onDoubleTap() {
     final post = widget.post;
@@ -1514,6 +1567,16 @@ class _PostCardState extends ConsumerState<_PostCard>
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Bookmark / Save
+                  GestureDetector(
+                    onTap: _toggleSave,
+                    child: Icon(
+                      _isSaved ? Icons.bookmark : Icons.bookmark_border,
+                      size: 22,
+                      color: _isSaved ? AppTheme.primaryColor : Colors.grey[600],
                     ),
                   ),
                 ],
