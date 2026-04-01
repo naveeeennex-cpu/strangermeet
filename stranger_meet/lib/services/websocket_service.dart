@@ -106,6 +106,52 @@ class WebSocketService {
     }));
   }
 
+  void sendCallOffer(String receiverId, String sdp, {bool isVideo = false}) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'call_offer',
+      'receiver_id': receiverId,
+      'sdp': sdp,
+      'is_video': isVideo,
+    }));
+  }
+
+  void sendCallAnswer(String receiverId, String sdp) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'call_answer',
+      'receiver_id': receiverId,
+      'sdp': sdp,
+    }));
+  }
+
+  void sendCallReject(String receiverId) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'call_reject',
+      'receiver_id': receiverId,
+    }));
+  }
+
+  void sendCallEnd(String receiverId) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'call_end',
+      'receiver_id': receiverId,
+    }));
+  }
+
+  void sendIceCandidate(String receiverId, String candidate, String sdpMid, int sdpMLineIndex) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'ice_candidate',
+      'receiver_id': receiverId,
+      'candidate': candidate,
+      'sdp_mid': sdpMid,
+      'sdp_m_line_index': sdpMLineIndex,
+    }));
+  }
+
   void disconnect() {
     _reconnectTimer?.cancel();
     _channel?.sink.close();

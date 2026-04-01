@@ -20,6 +20,7 @@ import '../../widgets/date_separator.dart';
 import '../../widgets/message_actions_sheet.dart';
 import '../../widgets/voice_record_button.dart';
 import '../../widgets/voice_message_bubble.dart';
+import '../call/call_screen.dart';
 
 // ── Dark theme constants for chat screens ────────────────────────────────────
 const Color _kChatScaffoldBg = Color(0xFF0A0A0A);
@@ -548,6 +549,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ],
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.call, color: Colors.white),
+            onPressed: () => Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => CallScreen(
+                  peerId: widget.userId,
+                  peerName: widget.userName,
+                  peerImage: '',
+                  isVideo: false,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.videocam, color: Colors.white),
+            onPressed: () => Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => CallScreen(
+                  peerId: widget.userId,
+                  peerName: widget.userName,
+                  peerImage: '',
+                  isVideo: true,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -678,18 +707,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         )
                       : VoiceRecordButton(
                           isEnabled: !_isUploading,
-                          onVoiceSent: (audioUrl, duration) async {
+                          onRecordingDone: (tempId, localPath, duration) async {
+                            // Instantly show pending voice bubble
+                            ref.read(messagesProvider(widget.userId).notifier)
+                                .addLocalPending(Message(
+                              id: tempId,
+                              senderId: _currentUserId ?? '',
+                              receiverId: widget.userId,
+                              message: duration.toString(),
+                              timestamp: DateTime.now(),
+                              status: 'pending',
+                              imageUrl: localPath,
+                              messageType: 'voice',
+                            ));
+                            if (mounted) _scrollToBottom();
+                          },
+                          onUploadComplete: (tempId, audioUrl, duration) async {
+                            ref.read(messagesProvider(widget.userId).notifier)
+                                .removeMessage(tempId);
                             await ref
                                 .read(messagesProvider(widget.userId).notifier)
-                                .sendMessage(
-                                  duration.toString(),
-                                  imageUrl: audioUrl,
-                                  messageType: 'voice',
-                                );
-                            if (mounted) {
-                              setState(() {});
-                              _scrollToBottom();
-                            }
+                                .sendMessage(duration.toString(),
+                                    imageUrl: audioUrl, messageType: 'voice');
+                            if (mounted) _scrollToBottom();
+                          },
+                          onUploadFailed: (tempId) async {
+                            ref.read(messagesProvider(widget.userId).notifier)
+                                .removeMessage(tempId);
                           },
                         ),
                 ],

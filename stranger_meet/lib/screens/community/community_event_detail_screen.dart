@@ -10,6 +10,7 @@ import '../../config/theme.dart';
 import '../../models/community.dart';
 import '../../providers/community_provider.dart';
 import '../../services/api_service.dart';
+import 'event_rides_screen.dart';
 
 class CommunityEventDetailScreen extends ConsumerStatefulWidget {
   final String communityId;
@@ -302,6 +303,26 @@ class _CommunityEventDetailScreenState
                 ),
               ],
       ),
+
+      // Ride sharing FAB — only visible to enrolled users
+      floatingActionButton: event.isJoined
+          ? FloatingActionButton(
+              onPressed: () => Navigator.of(context, rootNavigator: true).push(
+                MaterialPageRoute(
+                  builder: (_) => EventRidesScreen(
+                    communityId: widget.communityId,
+                    eventId: widget.eventId,
+                    eventTitle: event.title,
+                    meetingPoint: event.meetingPoint,
+                  ),
+                ),
+              ),
+              backgroundColor: AppTheme.primaryColor,
+              tooltip: 'Ride sharing',
+              child: const Icon(Icons.directions_car, color: Colors.black),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
 
       // Bottom bar
       bottomNavigationBar: _BottomBar(
@@ -2125,11 +2146,11 @@ class _BottomBar extends StatelessWidget {
 
   void _contactAdmin(BuildContext context) async {
     try {
-      // Fetch community to get admin ID
       final response = await ApiService().get('/communities/$communityId');
       final adminId = response.data['created_by']?.toString();
       final adminName = response.data['creator_name']?.toString() ?? 'Admin';
       final adminPhone = response.data['admin_phone']?.toString();
+      final adminImage = response.data['creator_image']?.toString();
 
       if (adminId == null) {
         if (context.mounted) {
@@ -2144,43 +2165,62 @@ class _BottomBar extends StatelessWidget {
         showModalBottomSheet(
           context: context,
           useRootNavigator: true,
+          backgroundColor: const Color(0xFF1A1A1A),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           builder: (ctx) => SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Handle bar
                   Container(
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey[300],
+                      color: Colors.white24,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(height: 20),
                   const Text(
                     'Contact Admin',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   // Admin info card
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
+                      color: const Color(0xFF2A2A2A),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Theme.of(context).dividerColor),
+                      border: Border.all(color: Colors.white12),
                     ),
                     child: Row(
                       children: [
+                        // Profile photo
                         CircleAvatar(
-                          radius: 28,
-                          backgroundColor: Colors.black.withOpacity(0.1),
-                          child: const Icon(Icons.person, color: Colors.black54),
+                          radius: 30,
+                          backgroundColor: const Color(0xFF333333),
+                          backgroundImage: (adminImage != null && adminImage.isNotEmpty)
+                              ? CachedNetworkImageProvider(adminImage)
+                              : null,
+                          child: (adminImage == null || adminImage.isEmpty)
+                              ? Text(
+                                  adminName.isNotEmpty ? adminName[0].toUpperCase() : 'A',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : null,
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -2192,27 +2232,28 @@ class _BottomBar extends StatelessWidget {
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
+                                  color: Colors.white,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
+                              const SizedBox(height: 3),
+                              const Text(
                                 'Community Admin',
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.grey[500],
+                                  color: Colors.white54,
                                 ),
                               ),
                               if (adminPhone != null && adminPhone.isNotEmpty) ...[
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 5),
                                 Row(
                                   children: [
-                                    Icon(Icons.phone, size: 14, color: Colors.grey[500]),
+                                    const Icon(Icons.phone, size: 14, color: Colors.white38),
                                     const SizedBox(width: 4),
                                     Text(
                                       adminPhone,
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         fontSize: 13,
-                                        color: Colors.grey[600],
+                                        color: Colors.white60,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -2226,23 +2267,26 @@ class _BottomBar extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Chat button
+                  // Send Message button
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        GoRouter.of(context).push('/chat/$adminId?name=$adminName');
+                        GoRouter.of(context).push('/chat/$adminId?name=${Uri.encodeComponent(adminName)}');
                       },
-                      icon: const Icon(Icons.chat),
+                      icon: const Icon(Icons.chat, color: Colors.black),
                       label: const Text(
                         'Send Message',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppTheme.primaryColor,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -2250,8 +2294,8 @@ class _BottomBar extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  // View profile button
+                  const SizedBox(height: 10),
+                  // View Profile button
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -2260,21 +2304,24 @@ class _BottomBar extends StatelessWidget {
                         Navigator.pop(ctx);
                         GoRouter.of(context).push('/user/$adminId');
                       },
-                      icon: const Icon(Icons.person_outline),
+                      icon: const Icon(Icons.person_outline, color: Colors.white),
                       label: const Text(
                         'View Profile',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black87,
-                        side: BorderSide(color: Colors.grey.shade300),
+                        side: const BorderSide(color: Colors.white24),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),

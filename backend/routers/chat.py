@@ -613,6 +613,69 @@ async def websocket_chat(websocket: WebSocket, token: str):
                         },
                     )
 
+            elif msg_type == "call_offer":
+                receiver_id = data.get("receiver_id")
+                if receiver_id:
+                    await manager.send_to_user(
+                        receiver_id,
+                        {
+                            "type": "call_offer",
+                            "caller_id": user_id,
+                            "caller_name": user["name"],
+                            "caller_image": user.get("profile_image_url") or "",
+                            "sdp": data.get("sdp"),
+                            "is_video": data.get("is_video", False),
+                        },
+                    )
+
+            elif msg_type == "call_answer":
+                receiver_id = data.get("receiver_id")
+                if receiver_id:
+                    await manager.send_to_user(
+                        receiver_id,
+                        {
+                            "type": "call_answer",
+                            "answerer_id": user_id,
+                            "sdp": data.get("sdp"),
+                        },
+                    )
+
+            elif msg_type == "call_reject":
+                receiver_id = data.get("receiver_id")
+                if receiver_id:
+                    await manager.send_to_user(
+                        receiver_id,
+                        {
+                            "type": "call_reject",
+                            "rejector_id": user_id,
+                        },
+                    )
+
+            elif msg_type == "call_end":
+                receiver_id = data.get("receiver_id")
+                if receiver_id:
+                    await manager.send_to_user(
+                        receiver_id,
+                        {
+                            "type": "call_end",
+                            "sender_id": user_id,
+                        },
+                    )
+
+            elif msg_type == "ice_candidate":
+                receiver_id = data.get("receiver_id")
+                if receiver_id:
+                    await manager.send_to_user(
+                        receiver_id,
+                        {
+                            "type": "ice_candidate",
+                            "sender_id": user_id,
+                            "candidate": data.get("candidate"),
+                            "sdp_mid": data.get("sdp_mid"),
+                            "sdp_m_line_index": data.get("sdp_m_line_index"),
+                        },
+                    )
+
     except WebSocketDisconnect:
         await manager.disconnect(user_id)
     except Exception:

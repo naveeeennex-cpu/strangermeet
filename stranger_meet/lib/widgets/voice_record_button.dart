@@ -12,16 +12,21 @@ import '../services/api_service.dart';
 
 /// WhatsApp-style hold-to-record voice button.
 ///
-/// Replaces the send button when the text field is empty.
-/// Hold to record, release to send, slide left to cancel.
+/// Two-phase callbacks:
+/// - [onRecordingDone] fires immediately when user releases → add a pending bubble
+/// - [onUploadComplete] fires after upload succeeds → replace pending with real message
+/// - [onUploadFailed] fires on error → remove the pending bubble
 class VoiceRecordButton extends StatefulWidget {
-  /// Called after the recording is uploaded. Returns the public URL and duration.
-  final Future<void> Function(String audioUrl, int durationSeconds) onVoiceSent;
+  final Future<void> Function(String tempId, String localPath, int durationSeconds) onRecordingDone;
+  final Future<void> Function(String tempId, String audioUrl, int durationSeconds) onUploadComplete;
+  final Future<void> Function(String tempId) onUploadFailed;
   final bool isEnabled;
 
   const VoiceRecordButton({
     super.key,
-    required this.onVoiceSent,
+    required this.onRecordingDone,
+    required this.onUploadComplete,
+    required this.onUploadFailed,
     this.isEnabled = true,
   });
 
@@ -30,15 +35,19 @@ class VoiceRecordButton extends StatefulWidget {
 }
 
 class _VoiceRecordButtonState extends State<VoiceRecordButton>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final AudioRecorder _recorder = AudioRecorder();
   bool _isRecording = false;
-  bool _isUploading = false;
   bool _isCancelled = false;
   Duration _recordDuration = Duration.zero;
   Timer? _durationTimer;
   double _dragOffset = 0;
+
+  // Slow breathing pulse while recording
   late AnimationController _pulseController;
+  // Quick pop-scale when recording starts
+  late AnimationController _popController;
+  late Animation<double> _popAnimation;
 
   static const double _cancelThreshold = -100.0;
 
@@ -47,14 +56,24 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 700),
     );
+    _popController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    // 1.0 → 1.45 → 1.2  quick spring pop
+    _popAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.45), weight: 40),
+      TweenSequenceItem(tween: Tween(begin: 1.45, end: 1.20), weight: 60),
+    ]).animate(CurvedAnimation(parent: _popController, curve: Curves.easeOut));
   }
 
   @override
   void dispose() {
     _durationTimer?.cancel();
     _pulseController.dispose();
+    _popController.dispose();
     _recorder.dispose();
     super.dispose();
   }
@@ -69,13 +88,15 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
     try {
       if (!await _recorder.hasPermission()) return;
 
+      // Click sound + strong haptic on record start
+      SystemSound.play(SystemSoundType.click);
+      HapticFeedback.heavyImpact();
+
       final path = await _getTempPath();
       await _recorder.start(
         const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000),
         path: path,
       );
-
-      HapticFeedback.mediumImpact();
 
       setState(() {
         _isRecording = true;
@@ -84,14 +105,13 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
         _dragOffset = 0;
       });
 
-      _pulseController.repeat(reverse: true);
+      // Quick pop then slow breathing pulse
+      _popController.forward(from: 0).then((_) {
+        if (_isRecording) _pulseController.repeat(reverse: true);
+      });
 
       _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) {
-          setState(() {
-            _recordDuration += const Duration(seconds: 1);
-          });
-        }
+        if (mounted) setState(() => _recordDuration += const Duration(seconds: 1));
       });
     } catch (e) {
       debugPrint('Voice record start error: $e');
@@ -102,6 +122,7 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
     _durationTimer?.cancel();
     _pulseController.stop();
     _pulseController.reset();
+    _popController.reset();
 
     if (!_isRecording) return;
 
@@ -118,54 +139,44 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
       // Discard if cancelled or too short
       if (wasCancelled || duration < 1 || path == null) {
         if (path != null) {
-          try {
-            await File(path).delete();
-          } catch (_) {}
+          try { await File(path).delete(); } catch (_) {}
         }
         return;
       }
 
-      // Upload
-      setState(() => _isUploading = true);
+      // 1. Fire immediately — chat screen adds pending bubble right away
+      final tempId = 'temp_voice_${DateTime.now().millisecondsSinceEpoch}';
+      await widget.onRecordingDone(tempId, path, duration);
+
+      // 2. Upload in background
       try {
         final bytes = await File(path).readAsBytes();
         final fileName = path.split('/').last;
-
         final formData = FormData.fromMap({
           'file': MultipartFile.fromBytes(bytes, filename: fileName),
           'folder': 'voice_messages',
         });
 
-        final api = ApiService();
-        final uploadResponse =
-            await api.uploadFile('/upload', formData: formData);
-        final audioUrl =
-            uploadResponse.data['url'] ?? uploadResponse.data['image_url'] ?? '';
+        final uploadResponse = await ApiService().uploadFile('/upload', formData: formData);
+        final audioUrl = uploadResponse.data['url'] ?? uploadResponse.data['image_url'] ?? '';
 
         if (audioUrl.isNotEmpty) {
-          await widget.onVoiceSent(audioUrl, duration);
+          await widget.onUploadComplete(tempId, audioUrl, duration);
+        } else {
+          await widget.onUploadFailed(tempId);
         }
-
-        // Clean up temp file
-        try {
-          await File(path).delete();
-        } catch (_) {}
       } catch (e) {
+        await widget.onUploadFailed(tempId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to send voice message: $e')),
           );
         }
       } finally {
-        if (mounted) setState(() => _isUploading = false);
+        try { await File(path).delete(); } catch (_) {}
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isRecording = false;
-          _isUploading = false;
-        });
-      }
+      if (mounted) setState(() { _isRecording = false; });
       debugPrint('Voice record stop error: $e');
     }
   }
@@ -182,53 +193,38 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
   }
 
   String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(1, '0');
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
+    final m = d.inMinutes.remainder(60).toString().padLeft(1, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isUploading) {
-      return Container(
-        width: 48,
-        height: 48,
-        decoration: const BoxDecoration(
-          color: AppTheme.primaryColor,
-          shape: BoxShape.circle,
-        ),
-        child: const Padding(
-          padding: EdgeInsets.all(12),
-          child: CircularProgressIndicator(
-            strokeWidth: 2.5,
-            color: Colors.black,
-          ),
-        ),
-      );
-    }
-
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.centerRight,
       children: [
-        // Recording overlay — shown to the left of the mic button
         if (_isRecording)
           Positioned(
             right: 56,
             child: _buildRecordingOverlay(),
           ),
 
-        // Mic button
         GestureDetector(
           onLongPressStart: widget.isEnabled ? (_) => _startRecording() : null,
           onLongPressMoveUpdate: _onDragUpdate,
           onLongPressEnd: (_) => _stopRecording(),
           child: AnimatedBuilder(
-            animation: _pulseController,
+            animation: Listenable.merge([_pulseController, _popController]),
             builder: (context, child) {
-              final scale = _isRecording
-                  ? 1.0 + (_pulseController.value * 0.15)
-                  : 1.0;
+              double scale;
+              if (_popController.isAnimating) {
+                scale = _popAnimation.value;
+              } else if (_isRecording) {
+                scale = 1.2 + (_pulseController.value * 0.12);
+              } else {
+                scale = 1.0;
+              }
               return Transform.scale(scale: scale, child: child);
             },
             child: Container(
@@ -239,11 +235,14 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
                     ? (_isCancelled ? Colors.grey[700] : Colors.red)
                     : AppTheme.primaryColor,
                 shape: BoxShape.circle,
+                boxShadow: _isRecording
+                    ? [BoxShadow(color: Colors.red.withValues(alpha: 0.45), blurRadius: 12, spreadRadius: 2)]
+                    : [],
               ),
               child: Icon(
                 _isRecording ? Icons.mic : Icons.mic_none,
                 color: _isRecording ? Colors.white : Colors.black,
-                size: 24,
+                size: 26,
               ),
             ),
           ),
@@ -262,27 +261,19 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Red recording dot
           AnimatedBuilder(
             animation: _pulseController,
-            builder: (context, child) {
-              return Opacity(
-                opacity: 0.4 + (_pulseController.value * 0.6),
-                child: child,
-              );
-            },
+            builder: (context, child) => Opacity(
+              opacity: 0.4 + (_pulseController.value * 0.6),
+              child: child,
+            ),
             child: Container(
               width: 10,
               height: 10,
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
+              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
             ),
           ),
           const SizedBox(width: 8),
-
-          // Duration
           Text(
             _formatDuration(_recordDuration),
             style: const TextStyle(
@@ -293,31 +284,19 @@ class _VoiceRecordButtonState extends State<VoiceRecordButton>
             ),
           ),
           const SizedBox(width: 16),
-
-          // Slide to cancel
           if (!_isCancelled)
             Opacity(
               opacity: (1.0 + (_dragOffset / 150)).clamp(0.3, 1.0),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.chevron_left,
-                      color: Colors.grey[400], size: 18),
-                  Text(
-                    'Slide to cancel',
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 13,
-                    ),
-                  ),
+                  Icon(Icons.chevron_left, color: Colors.grey[400], size: 18),
+                  Text('Slide to cancel', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                 ],
               ),
             )
           else
-            Text(
-              'Cancelled',
-              style: TextStyle(color: Colors.red[300], fontSize: 13),
-            ),
+            Text('Cancelled', style: TextStyle(color: Colors.red[300], fontSize: 13)),
         ],
       ),
     );

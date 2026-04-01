@@ -15,6 +15,7 @@ from schemas.community import (
     CommunityMemberResponse,
     SubGroupMemberResponse,
     ItineraryDayCreate, ItineraryDayResponse,
+    EventRideCreate, EventRideResponse, EventRidePassengerResponse,
 )
 from services.auth import get_current_user
 
@@ -288,6 +289,7 @@ async def get_community(
     try:
         row = await pool.fetchrow(
             """SELECT c.*, u.name AS creator_name, u.phone AS admin_phone,
+                      u.profile_image_url AS creator_image,
                       cm.role AS member_role, cm.status AS member_status
                FROM communities c
                JOIN users u ON c.created_by = u.id
@@ -310,6 +312,7 @@ async def get_community(
         is_private=row["is_private"],
         created_by=str(row["created_by"]),
         creator_name=row["creator_name"],
+        creator_image=row.get("creator_image") or None,
         admin_phone=row.get("admin_phone") or None,
         members_count=row["members_count"],
         is_member=row["member_role"] is not None and row.get("member_status") == "active",
@@ -2246,3 +2249,220 @@ async def delete_itinerary_day(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary day not found")
 
     return {"detail": "Itinerary day deleted successfully"}
+
+
+# ── Event Ride Sharing ────────────────────────────────────────────────────────
+
+async def _build_ride_response(pool, ride_row, user_id: str) -> dict:
+    """Build a full EventRideResponse dict from a DB row."""
+    ride_id = str(ride_row["id"])
+
+    # Driver info
+    driver = await pool.fetchrow(
+        "SELECT name, profile_image_url FROM users WHERE id = $1",
+        ride_row["user_id"]
+    )
+
+    # Passengers
+    passengers_rows = await pool.fetch(
+        """SELECT erp.id, erp.user_id, erp.created_at, u.name, u.profile_image_url
+           FROM event_ride_passengers erp
+           JOIN users u ON u.id = erp.user_id
+           WHERE erp.ride_id = $1
+           ORDER BY erp.created_at""",
+        ride_id
+    )
+    passengers = [
+        {
+            "id": str(p["id"]),
+            "user_id": str(p["user_id"]),
+            "user_name": p["name"],
+            "user_profile_image": p["profile_image_url"] or "",
+            "joined_at": p["created_at"],
+        }
+        for p in passengers_rows
+    ]
+
+    is_passenger = any(str(p["user_id"]) == user_id for p in passengers_rows)
+
+    return {
+        "id": ride_id,
+        "event_id": str(ride_row["event_id"]),
+        "user_id": str(ride_row["user_id"]),
+        "driver_name": driver["name"] if driver else None,
+        "driver_image": driver["profile_image_url"] if driver else "",
+        "vehicle_type": ride_row["vehicle_type"],
+        "vehicle_model": ride_row["vehicle_model"] or "",
+        "vehicle_color": ride_row["vehicle_color"] or "",
+        "total_seats": ride_row["total_seats"],
+        "available_seats": ride_row["available_seats"],
+        "start_location": ride_row["start_location"] or "",
+        "start_time": ride_row["start_time"],
+        "is_free": ride_row["is_free"],
+        "cost_per_person": ride_row["cost_per_person"] or 0,
+        "notes": ride_row["notes"] or "",
+        "is_driver": str(ride_row["user_id"]) == user_id,
+        "is_passenger": is_passenger,
+        "passengers": passengers,
+        "created_at": ride_row["created_at"],
+    }
+
+
+@router.post("/{community_id}/events/{event_id}/rides", response_model=EventRideResponse, status_code=status.HTTP_201_CREATED)
+async def create_event_ride(
+    community_id: str,
+    event_id: str,
+    ride_data: EventRideCreate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    # Must be enrolled in the event
+    booking = await pool.fetchrow(
+        "SELECT id FROM community_event_bookings WHERE event_id = $1 AND user_id = $2",
+        event_id, user_id
+    )
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be enrolled in this event to offer a ride")
+
+    # Only one ride offer per event per user
+    existing = await pool.fetchrow(
+        "SELECT id FROM event_rides WHERE event_id = $1 AND user_id = $2",
+        event_id, user_id
+    )
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already have a ride offer for this event")
+
+    row = await pool.fetchrow(
+        """INSERT INTO event_rides
+           (event_id, user_id, vehicle_type, vehicle_model, vehicle_color,
+            total_seats, available_seats, start_location, start_time,
+            is_free, cost_per_person, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           RETURNING *""",
+        event_id, user_id,
+        ride_data.vehicle_type, ride_data.vehicle_model, ride_data.vehicle_color,
+        ride_data.total_seats, ride_data.total_seats,
+        ride_data.start_location, ride_data.start_time,
+        ride_data.is_free, ride_data.cost_per_person, ride_data.notes
+    )
+
+    return await _build_ride_response(pool, row, user_id)
+
+
+@router.get("/{community_id}/events/{event_id}/rides", response_model=List[EventRideResponse])
+async def list_event_rides(
+    community_id: str,
+    event_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    rows = await pool.fetch(
+        "SELECT * FROM event_rides WHERE event_id = $1 ORDER BY start_time",
+        event_id
+    )
+
+    return [await _build_ride_response(pool, row, user_id) for row in rows]
+
+
+@router.post("/{community_id}/events/{event_id}/rides/{ride_id}/join", response_model=EventRideResponse)
+async def join_event_ride(
+    community_id: str,
+    event_id: str,
+    ride_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    # Must be enrolled
+    booking = await pool.fetchrow(
+        "SELECT id FROM community_event_bookings WHERE event_id = $1 AND user_id = $2",
+        event_id, user_id
+    )
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be enrolled in this event")
+
+    ride = await pool.fetchrow("SELECT * FROM event_rides WHERE id = $1 AND event_id = $2", ride_id, event_id)
+    if not ride:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+
+    if str(ride["user_id"]) == user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot join your own ride")
+
+    if ride["available_seats"] <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No seats available")
+
+    # Check already joined
+    existing = await pool.fetchrow(
+        "SELECT id FROM event_ride_passengers WHERE ride_id = $1 AND user_id = $2",
+        ride_id, user_id
+    )
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already joined this ride")
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "INSERT INTO event_ride_passengers (ride_id, user_id) VALUES ($1, $2)",
+                ride_id, user_id
+            )
+            await conn.execute(
+                "UPDATE event_rides SET available_seats = available_seats - 1 WHERE id = $1",
+                ride_id
+            )
+
+    updated_ride = await pool.fetchrow("SELECT * FROM event_rides WHERE id = $1", ride_id)
+    return await _build_ride_response(pool, updated_ride, user_id)
+
+
+@router.delete("/{community_id}/events/{event_id}/rides/{ride_id}/leave", status_code=status.HTTP_200_OK)
+async def leave_event_ride(
+    community_id: str,
+    event_id: str,
+    ride_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    result = await pool.execute(
+        "DELETE FROM event_ride_passengers WHERE ride_id = $1 AND user_id = $2",
+        ride_id, user_id
+    )
+    if result == "DELETE 0":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="You are not a passenger on this ride")
+
+    await pool.execute(
+        "UPDATE event_rides SET available_seats = available_seats + 1 WHERE id = $1",
+        ride_id
+    )
+    return {"detail": "Left ride successfully"}
+
+
+@router.delete("/{community_id}/events/{event_id}/rides/{ride_id}", status_code=status.HTTP_200_OK)
+async def delete_event_ride(
+    community_id: str,
+    event_id: str,
+    ride_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+
+    ride = await pool.fetchrow("SELECT user_id FROM event_rides WHERE id = $1 AND event_id = $2", ride_id, event_id)
+    if not ride:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if str(ride["user_id"]) != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own ride")
+
+    await pool.execute("DELETE FROM event_rides WHERE id = $1", ride_id)
+    return {"detail": "Ride deleted successfully"}

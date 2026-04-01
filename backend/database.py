@@ -555,6 +555,36 @@ async def init_db():
         await conn.execute("ALTER TABLE communities ADD COLUMN IF NOT EXISTS admin_only_chat BOOLEAN DEFAULT false")
         await conn.execute("ALTER TABLE sub_groups ADD COLUMN IF NOT EXISTS admin_only_chat BOOLEAN DEFAULT false")
 
+        # Event ride sharing tables
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS event_rides (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                event_id UUID NOT NULL REFERENCES community_events(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                vehicle_type VARCHAR(10) NOT NULL DEFAULT 'car',
+                vehicle_model TEXT DEFAULT '',
+                vehicle_color TEXT DEFAULT '',
+                total_seats INT NOT NULL DEFAULT 1,
+                available_seats INT NOT NULL DEFAULT 1,
+                start_location TEXT NOT NULL DEFAULT '',
+                start_time TIMESTAMPTZ NOT NULL,
+                is_free BOOLEAN DEFAULT TRUE,
+                cost_per_person FLOAT DEFAULT 0,
+                notes TEXT DEFAULT '',
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS event_ride_passengers (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                ride_id UUID NOT NULL REFERENCES event_rides(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(ride_id, user_id)
+            );
+        """)
+
 
 async def seed_demo_data():
     """Insert demo users, posts, and events if the DB is empty."""

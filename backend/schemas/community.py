@@ -28,6 +28,7 @@ class CommunityResponse(BaseModel):
     is_private: bool = False
     created_by: str
     creator_name: Optional[str] = None
+    creator_image: Optional[str] = None
     admin_phone: Optional[str] = None
     members_count: int = 0
     is_member: bool = False
@@ -250,3 +251,56 @@ class SubGroupMemberResponse(BaseModel):
     user_name: Optional[str] = None
     user_profile_image: Optional[str] = None
     joined_at: datetime
+
+
+class EventRideCreate(BaseModel):
+    vehicle_type: str = "car"          # 'car' or 'bike'
+    vehicle_model: str = ""
+    vehicle_color: str = ""
+    total_seats: int = 1
+    start_location: str
+    start_time: datetime
+    is_free: bool = True
+    cost_per_person: float = 0
+    notes: str = ""
+
+    @field_validator('start_time', mode='before')
+    @classmethod
+    def ensure_timezone_aware(cls, v):
+        if isinstance(v, str):
+            from dateutil import parser
+            v = parser.parse(v)
+        if isinstance(v, datetime) and v.tzinfo is None:
+            from datetime import timezone
+            v = v.replace(tzinfo=timezone.utc)
+        return v
+
+
+class EventRidePassengerResponse(BaseModel):
+    id: str
+    user_id: str
+    user_name: Optional[str] = None
+    user_profile_image: Optional[str] = None
+    joined_at: datetime
+
+
+class EventRideResponse(BaseModel):
+    id: str
+    event_id: str
+    user_id: str
+    driver_name: Optional[str] = None
+    driver_image: Optional[str] = None
+    vehicle_type: str = "car"
+    vehicle_model: str = ""
+    vehicle_color: str = ""
+    total_seats: int = 1
+    available_seats: int = 1
+    start_location: str = ""
+    start_time: datetime
+    is_free: bool = True
+    cost_per_person: float = 0
+    notes: str = ""
+    is_driver: bool = False
+    is_passenger: bool = False
+    passengers: List[EventRidePassengerResponse] = []
+    created_at: datetime
