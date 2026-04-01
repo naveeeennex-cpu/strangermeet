@@ -371,7 +371,7 @@ class _EventRidesScreenState extends State<EventRidesScreen> {
                   color: AppTheme.primaryColor,
                   onRefresh: _loadRides,
                   child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 110 + MediaQuery.of(context).padding.bottom),
                     itemCount: _rides.length,
                     itemBuilder: (ctx, i) => GestureDetector(
                       onTap: () => Navigator.of(context).push(
@@ -989,7 +989,7 @@ class _OfferRideSheetState extends State<_OfferRideSheet> {
         color: Color(0xFF1A1A1A),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 24),
       child: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -1521,7 +1521,7 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
                 ),
                 child: ListView(
                   controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                  padding: EdgeInsets.fromLTRB(20, 12, 20, 40 + MediaQuery.of(context).padding.bottom),
                   children: [
                     // Handle bar
                     Center(
