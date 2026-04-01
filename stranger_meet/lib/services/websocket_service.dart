@@ -141,6 +141,23 @@ class WebSocketService {
     }));
   }
 
+  /// Saves call history to DB and broadcasts to both users.
+  /// status: 'ended' | 'missed' | 'declined'
+  void sendCallLog(String receiverId, {
+    required int duration,
+    required bool isVideo,
+    required String status,
+  }) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'call_log',
+      'receiver_id': receiverId,
+      'duration': duration,
+      'is_video': isVideo,
+      'status': status,
+    }));
+  }
+
   void sendIceCandidate(String receiverId, String candidate, String sdpMid, int sdpMLineIndex) {
     if (!_isConnected || _channel == null) return;
     _channel!.sink.add(jsonEncode({

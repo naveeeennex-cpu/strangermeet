@@ -47,10 +47,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   String? _coverImageUrl;
   bool _isUploadingCover = false;
 
-  // Venue coordinates (pinned on map)
+  // Location / venue coordinates (pinned on map)
   double _venueLat = 0;
   double _venueLng = 0;
   String _venueLocationName = '';
+
+  // Meeting point coordinates (pinned on map, trips only)
+  double _meetingPointLat = 0;
+  double _meetingPointLng = 0;
 
   // Step 2: Schedule & Pricing
   DateTime _startDate = DateTime.now().add(const Duration(days: 7));
@@ -120,9 +124,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       _coverImageUrl = event['image_url'];
       _venueLat = (event['venue_lat'] ?? 0).toDouble();
       _venueLng = (event['venue_lng'] ?? 0).toDouble();
-      if (_venueLat != 0 || _venueLng != 0) {
-        _venueLocationName = event['location'] ?? '';
-      }
+      _venueLocationName = event['location'] ?? '';
       final price = (event['price'] ?? 0).toDouble();
       _priceController.text = price.toString();
       _isFreeEntry = price <= 0;
@@ -249,6 +251,18 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Require location to be pinned on map
+    if (_venueLat == 0 && _venueLng == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please pin the event location on the map'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      setState(() => _currentStep = 0);
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
@@ -509,6 +523,83 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     return const SizedBox.shrink();
   }
 
+  // Reusable map picker card widget
+  Widget _buildMapPickerCard({
+    required bool isPinned,
+    required String pinnedLabel,
+    required String unpinnedLabel,
+    required String locationName,
+    required double lat,
+    required double lng,
+    required ThemeData theme,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isPinned
+            ? AppTheme.primaryColor.withOpacity(0.1)
+            : theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isPinned ? AppTheme.primaryColor : theme.dividerColor,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isPinned ? Icons.location_on : Icons.add_location_alt_outlined,
+            color: isPinned ? AppTheme.primaryColor : Colors.grey,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isPinned ? pinnedLabel : unpinnedLabel,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isPinned ? AppTheme.primaryColor : Colors.grey,
+                  ),
+                ),
+                if (locationName.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    locationName,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ] else if (isPinned) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (isPinned)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Change',
+                  style: TextStyle(fontSize: 12, color: AppTheme.primaryColor),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.edit, size: 14, color: AppTheme.primaryColor),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   // =========================================================================
   // STEP 1: Basic Details
   // =========================================================================
@@ -593,23 +684,9 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         const SizedBox(height: 20),
 
         _sectionHeader('Location', theme),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: _locationController,
-          decoration: const InputDecoration(
-            hintText: 'Event location',
-            prefixIcon: Icon(Icons.location_on_outlined),
-          ),
-          validator: (v) =>
-              (v == null || v.trim().isEmpty) ? 'Location is required' : null,
-        ),
-        const SizedBox(height: 16),
-
-        // Venue Map Pin
-        _sectionHeader('Venue Pin on Map', theme),
         const SizedBox(height: 4),
         Text(
-          'Pin the exact venue so attendees can see routes and drivers can use it as the drop point.',
+          'Pin the venue on the map so attendees can get directions and drivers can use it as a drop point.',
           style: TextStyle(fontSize: 12, color: Colors.grey[500]),
         ),
         const SizedBox(height: 10),
@@ -618,8 +695,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             final result = await Navigator.of(context, rootNavigator: true).push<PickedLocation>(
               MaterialPageRoute(
                 builder: (_) => MapLocationPicker(
-                  title: 'Pin Venue Location',
-                  confirmLabel: 'Set as Venue',
+                  title: 'Set Event Location',
+                  confirmLabel: 'Set Location',
                   initialLocation: (_venueLat != 0 || _venueLng != 0)
                       ? LatLng(_venueLat, _venueLng)
                       : null,
@@ -631,112 +708,69 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 _venueLat = result.latLng.latitude;
                 _venueLng = result.latLng.longitude;
                 _venueLocationName = result.address;
-                // Auto-fill location text if empty
-                if (_locationController.text.trim().isEmpty) {
-                  _locationController.text = result.address;
-                }
+                _locationController.text = result.address;
               });
             }
           },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: (_venueLat != 0 || _venueLng != 0)
-                  ? AppTheme.primaryColor.withOpacity(0.1)
-                  : theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: (_venueLat != 0 || _venueLng != 0)
-                    ? AppTheme.primaryColor
-                    : theme.dividerColor,
-                width: 1.5,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  (_venueLat != 0 || _venueLng != 0)
-                      ? Icons.location_on
-                      : Icons.add_location_alt_outlined,
-                  color: (_venueLat != 0 || _venueLng != 0)
-                      ? AppTheme.primaryColor
-                      : Colors.grey,
-                  size: 22,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        (_venueLat != 0 || _venueLng != 0)
-                            ? 'Venue pinned'
-                            : 'Tap to pin venue on map',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: (_venueLat != 0 || _venueLng != 0)
-                              ? AppTheme.primaryColor
-                              : Colors.grey,
-                        ),
-                      ),
-                      if (_venueLocationName.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          _venueLocationName,
-                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ] else if (_venueLat != 0 || _venueLng != 0) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          '${_venueLat.toStringAsFixed(5)}, ${_venueLng.toStringAsFixed(5)}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (_venueLat != 0 || _venueLng != 0)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Change',
-                        style: TextStyle(fontSize: 12, color: AppTheme.primaryColor),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.edit, size: 14, color: AppTheme.primaryColor),
-                    ],
-                  ),
-              ],
-            ),
+          child: _buildMapPickerCard(
+            isPinned: _venueLat != 0 || _venueLng != 0,
+            pinnedLabel: 'Location pinned',
+            unpinnedLabel: 'Tap to pin location on map',
+            locationName: _venueLocationName.isNotEmpty
+                ? _venueLocationName
+                : _locationController.text,
+            lat: _venueLat,
+            lng: _venueLng,
+            theme: theme,
           ),
         ),
+        if (_venueLat == 0 && _venueLng == 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              'Location is required',
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            ),
+          ),
 
         if (_isTrip) ...[
           const SizedBox(height: 20),
           _sectionHeader('Meeting Point', theme),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _meetingPointController,
-            decoration: const InputDecoration(
-              hintText: 'e.g., Koyambedu Bus Stand - 6:00 AM',
-              prefixIcon: Icon(Icons.pin_drop_outlined),
-              labelText: 'Location Name & Time',
-            ),
+          const SizedBox(height: 4),
+          Text(
+            'Set the pickup/gathering point where participants will meet.',
+            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
           ),
           const SizedBox(height: 10),
-          TextFormField(
-            controller: _meetingPointUrlController,
-            decoration: InputDecoration(
-              hintText: 'https://maps.google.com/...',
-              prefixIcon: const Icon(Icons.map_outlined),
-              labelText: 'Google Maps Link (optional)',
-              suffixIcon: _meetingPointUrlController.text.isNotEmpty
-                  ? Icon(Icons.open_in_new, size: 18, color: Colors.blue[400])
-                  : null,
+          GestureDetector(
+            onTap: () async {
+              final result = await Navigator.of(context, rootNavigator: true).push<PickedLocation>(
+                MaterialPageRoute(
+                  builder: (_) => MapLocationPicker(
+                    title: 'Set Meeting Point',
+                    confirmLabel: 'Set Meeting Point',
+                    initialLocation: (_meetingPointLat != 0 || _meetingPointLng != 0)
+                        ? LatLng(_meetingPointLat, _meetingPointLng)
+                        : null,
+                  ),
+                ),
+              );
+              if (result != null) {
+                setState(() {
+                  _meetingPointLat = result.latLng.latitude;
+                  _meetingPointLng = result.latLng.longitude;
+                  _meetingPointController.text = result.address;
+                });
+              }
+            },
+            child: _buildMapPickerCard(
+              isPinned: _meetingPointLat != 0 || _meetingPointLng != 0,
+              pinnedLabel: 'Meeting point set',
+              unpinnedLabel: 'Tap to set meeting point on map',
+              locationName: _meetingPointController.text,
+              lat: _meetingPointLat,
+              lng: _meetingPointLng,
+              theme: theme,
             ),
           ),
         ],

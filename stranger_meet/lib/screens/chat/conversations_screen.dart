@@ -88,6 +88,25 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
     return filtered;
   }
 
+  String _formatLastMessage(String msg) {
+    // Call history: format is "{duration}:{kind}:{status}"
+    final callPattern = RegExp(r'^\d+:(voice|video):(ended|missed|declined)$');
+    if (callPattern.hasMatch(msg)) {
+      final parts = msg.split(':');
+      final kind = parts[1];
+      final status = parts[2];
+      final isVideo = kind == 'video';
+      if (status == 'missed' || status == 'declined') {
+        return isVideo ? '📹 Missed video call' : '📞 Missed call';
+      }
+      final duration = int.tryParse(parts[0]) ?? 0;
+      final m = (duration ~/ 60).toString().padLeft(2, '0');
+      final s = (duration % 60).toString().padLeft(2, '0');
+      return isVideo ? '📹 Video call • $m:$s' : '📞 Voice call • $m:$s';
+    }
+    return msg;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(conversationsProvider);
@@ -300,8 +319,8 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
           ),
           subtitle: Text(
             RegExp(r'^\d{1,3}$').hasMatch(conversation.lastMessage)
-                ? '\u{1F3A4} Voice message'
-                : conversation.lastMessage,
+                ? '🎤 Voice message'
+                : _formatLastMessage(conversation.lastMessage),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(

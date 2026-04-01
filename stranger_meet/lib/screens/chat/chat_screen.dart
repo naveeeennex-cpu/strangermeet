@@ -937,6 +937,7 @@ class _MessageBubbleState extends State<_MessageBubble>
     final isSharedPost = messageType == 'shared_post';
     final isVoice = messageType == 'voice' && imageUrl.isNotEmpty;
     final isLocation = messageType == 'location';
+    final isCall = messageType == 'call';
 
     return AnimatedBuilder(
       animation: _animController,
@@ -960,13 +961,115 @@ class _MessageBubbleState extends State<_MessageBubble>
               time: time,
               status: status,
             )
-          : isLocation
-              ? _buildLocationBubble(context, isMe, status, message, time)
-              : isSharedPost
-                  ? _buildSharedPostCard(
-                      context, isMe, status, message, time, imageUrl)
-                  : _buildRegularBubble(
-                      context, isMe, status, message, time, imageUrl, isImage),
+          : isCall
+              ? _buildCallBubble(context, isMe, status, message, time)
+              : isLocation
+                  ? _buildLocationBubble(context, isMe, status, message, time)
+                  : isSharedPost
+                      ? _buildSharedPostCard(
+                          context, isMe, status, message, time, imageUrl)
+                      : _buildRegularBubble(
+                          context, isMe, status, message, time, imageUrl, isImage),
+    );
+  }
+
+  // Call history bubble — format: "{duration}:{kind}:{status}"
+  // e.g. "120:voice:ended", "0:video:missed", "0:voice:declined"
+  Widget _buildCallBubble(BuildContext context, bool isMe, String status,
+      String message, String time) {
+    // Parse message
+    final parts = message.split(':');
+    final duration = int.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
+    final kind = parts.length > 1 ? parts[1] : 'voice';    // 'voice' | 'video'
+    final callStatus = parts.length > 2 ? parts[2] : 'ended'; // 'ended' | 'missed' | 'declined'
+
+    final isVideo = kind == 'video';
+    final isMissed = callStatus == 'missed' || callStatus == 'declined';
+
+    final iconColor = isMissed ? Colors.red[400]! : Colors.green[400]!;
+    final iconData = isVideo
+        ? (isMissed ? Icons.videocam_off_rounded : Icons.videocam_rounded)
+        : (isMissed ? Icons.phone_missed_rounded : Icons.phone_rounded);
+
+    String labelText;
+    if (isMissed) {
+      labelText = isVideo ? 'Missed video call' : 'Missed call';
+    } else {
+      labelText = isVideo ? 'Video call' : 'Voice call';
+    }
+
+    String durationText = '';
+    if (duration > 0) {
+      final m = (duration ~/ 60).toString().padLeft(2, '0');
+      final s = (duration % 60).toString().padLeft(2, '0');
+      durationText = '$m:$s';
+    }
+
+    Widget ticks(String s) {
+      switch (s) {
+        case 'read':     return const Icon(Icons.done_all, size: 13, color: Colors.blue);
+        case 'delivered':return Icon(Icons.done_all, size: 13, color: Colors.grey[400]);
+        default:         return Icon(Icons.check, size: 13, color: Colors.grey[400]);
+      }
+    }
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isMe ? const Color(0xFF1B5E20) : const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(18),
+          border: isMissed ? Border.all(color: Colors.red.withValues(alpha: 0.3), width: 1) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: iconColor.withValues(alpha: 0.15),
+              ),
+              child: Icon(iconData, color: iconColor, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  labelText,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (durationText.isNotEmpty) ...[
+                      Icon(Icons.timer_outlined, size: 11, color: Colors.grey[400]),
+                      const SizedBox(width: 3),
+                      Text(durationText,
+                          style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                      const SizedBox(width: 8),
+                    ],
+                    Text(time,
+                        style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                    const SizedBox(width: 4),
+                    ticks(status),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
