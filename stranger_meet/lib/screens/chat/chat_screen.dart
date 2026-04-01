@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -309,7 +310,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
     if (pickedFile == null) return;
 
-    if (mounted) setState(() => _isUploading = true);
+    // 1. Show local preview immediately in the chat
+    final tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
+    final localPath = pickedFile.path;
+    final pendingMsg = Message(
+      id: tempId,
+      senderId: _currentUserId ?? '',
+      receiverId: widget.userId,
+      message: '',
+      timestamp: DateTime.now(),
+      status: 'pending',
+      imageUrl: 'file://$localPath',
+      messageType: 'image',
+    );
+    ref.read(messagesProvider(widget.userId).notifier).addLocalPending(pendingMsg);
+    if (mounted) _scrollToBottom();
 
     try {
       final bytes = await pickedFile.readAsBytes();
@@ -325,6 +340,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final imageUrl = uploadResponse.data['url'] ?? uploadResponse.data['image_url'] ?? '';
 
       if (imageUrl.isEmpty) {
+        ref.read(messagesProvider(widget.userId).notifier).removeMessage(tempId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Failed to upload image')),
@@ -333,22 +349,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         return;
       }
 
+      // 2. Remove local preview, send the real message
+      ref.read(messagesProvider(widget.userId).notifier).removeMessage(tempId);
       await ref
           .read(messagesProvider(widget.userId).notifier)
           .sendMessage('', imageUrl: imageUrl, messageType: 'image');
-      if (mounted) {
-        setState(() {});
-        await Future.delayed(const Duration(milliseconds: 100));
-        _scrollToBottom();
-      }
+      if (mounted) _scrollToBottom();
     } catch (e) {
+      ref.read(messagesProvider(widget.userId).notifier).removeMessage(tempId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to send image: $e')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -986,7 +999,7 @@ class _MessageBubbleState extends State<_MessageBubble>
             ? const EdgeInsets.all(4)
             : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          maxWidth: isImage ? 172 : MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
           color: isMe ? _kMyBubbleColor : _kOtherBubbleColor,
@@ -1002,28 +1015,59 @@ class _MessageBubbleState extends State<_MessageBubble>
           children: [
             if (isImage)
               GestureDetector(
-                onTap: () => _showFullImage(context, imageUrl),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    maxWidthDiskCache: 600,
-                    placeholder: (context, url) => Container(
-                      height: 200,
-                      color: const Color(0xFF2A2A2A),
-                      child: const Center(
-                          child:
-                              CircularProgressIndicator(color: Colors.white)),
+                onTap: status == 'pending'
+                    ? null
+                    : () => _showFullImage(context, imageUrl),
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: imageUrl.startsWith('file://')
+                          ? Image.file(
+                              File(imageUrl.substring(7)),
+                              width: 160,
+                              height: 160,
+                              fit: BoxFit.cover,
+                            )
+                          : CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              width: 160,
+                              height: 160,
+                              fit: BoxFit.cover,
+                              maxWidthDiskCache: 400,
+                              placeholder: (context, url) => Container(
+                                width: 160,
+                                height: 160,
+                                color: const Color(0xFF2A2A2A),
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                width: 160,
+                                height: 160,
+                                color: const Color(0xFF2A2A2A),
+                                child: const Icon(Icons.broken_image,
+                                    size: 36, color: Colors.grey),
+                              ),
+                            ),
                     ),
-                    errorWidget: (context, url, error) => Container(
-                      height: 200,
-                      color: const Color(0xFF2A2A2A),
-                      child: const Icon(Icons.broken_image,
-                          size: 40, color: Colors.grey),
-                    ),
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                  ),
+                    // Uploading overlay
+                    if (status == 'pending')
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 160,
+                            height: 160,
+                            color: Colors.black45,
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             if (!isImage)

@@ -525,6 +525,15 @@ class SubGroupMessagesNotifier extends StateNotifier<SubGroupMessagesState> {
     state = state.copyWith(messages: messages);
   }
 
+  void addLocalPending(CommunityMessage message) {
+    state = state.copyWith(messages: [...state.messages, message]);
+  }
+
+  void removeMessage(String id) {
+    final updated = state.messages.where((m) => m.id != id).toList();
+    state = state.copyWith(messages: updated);
+  }
+
   Future<void> sendMessage(String text, {String imageUrl = '', String messageType = 'text'}) async {
     try {
       final response = await _api.post(

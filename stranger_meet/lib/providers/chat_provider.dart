@@ -131,6 +131,17 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     state = state.copyWith(messages: [...state.messages, message]);
   }
 
+  /// Add a local-only pending message (e.g. image with a file:// path before upload).
+  void addLocalPending(Message message) {
+    state = state.copyWith(messages: [...state.messages, message]);
+  }
+
+  /// Remove a message by ID (used to clean up local pending previews).
+  void removeMessage(String id) {
+    final updated = state.messages.where((m) => m.id != id).toList();
+    state = state.copyWith(messages: updated);
+  }
+
   void setMessages(List<Message> messages) {
     state = state.copyWith(messages: messages);
   }
