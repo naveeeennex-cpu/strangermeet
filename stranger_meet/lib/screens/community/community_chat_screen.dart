@@ -703,17 +703,31 @@ class _CommunityChatScreenState extends ConsumerState<CommunityChatScreen> {
                           ),
                         )
                       : VoiceRecordButton(
-                          onVoiceSent: (audioUrl, duration) async {
-                            await ref
-                                .read(communityMessagesProvider(
-                                        widget.communityId)
-                                    .notifier)
-                                .sendMessage(
-                                  duration.toString(),
-                                  imageUrl: audioUrl,
-                                  messageType: 'voice',
-                                );
+                          onRecordingDone: (tempId, localPath, duration) async {
+                            ref.read(communityMessagesProvider(widget.communityId).notifier)
+                                .addLocalPending(CommunityMessage(
+                              id: tempId,
+                              communityId: widget.communityId,
+                              userId: _currentUserId ?? '',
+                              userName: '',
+                              message: duration.toString(),
+                              imageUrl: localPath,
+                              messageType: 'voice',
+                            ));
                             if (mounted) _scrollToBottom();
+                          },
+                          onUploadComplete: (tempId, audioUrl, duration) async {
+                            ref.read(communityMessagesProvider(widget.communityId).notifier)
+                                .removeMessage(tempId);
+                            await ref
+                                .read(communityMessagesProvider(widget.communityId).notifier)
+                                .sendMessage(duration.toString(),
+                                    imageUrl: audioUrl, messageType: 'voice');
+                            if (mounted) _scrollToBottom();
+                          },
+                          onUploadFailed: (tempId) async {
+                            ref.read(communityMessagesProvider(widget.communityId).notifier)
+                                .removeMessage(tempId);
                           },
                         ),
                 ],

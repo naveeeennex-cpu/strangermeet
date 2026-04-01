@@ -8,6 +8,7 @@ import '../config/theme.dart';
 import '../providers/chat_provider.dart';
 import '../services/websocket_service.dart';
 import '../services/storage_service.dart';
+import 'call/incoming_call_screen.dart';
 
 class MainShell extends ConsumerStatefulWidget {
   final Widget child;
@@ -26,6 +27,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   // In-app notification state
   OverlayEntry? _notificationOverlay;
   Timer? _notificationTimer;
+
+  // Incoming call state
+  OverlayEntry? _incomingCallOverlay;
 
   static const _routes = [
     '/main',          // 0 - Home
@@ -47,6 +51,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     _wsSubscription?.cancel();
     _notificationTimer?.cancel();
     _dismissNotification();
+    _dismissIncomingCall();
     super.dispose();
   }
 
@@ -92,8 +97,51 @@ class _MainShellState extends ConsumerState<MainShell> {
           message: 'sent you a friend request',
           isFriendRequest: true,
         );
+      } else if (type == 'call_offer') {
+        final callerId = data['caller_id']?.toString() ?? '';
+        final callerName = data['caller_name']?.toString() ?? 'Someone';
+        final callerImage = data['caller_image']?.toString() ?? '';
+        final offerSdp = data['sdp']?.toString() ?? '';
+        final isVideo = data['is_video'] == true;
+        if (callerId.isNotEmpty && offerSdp.isNotEmpty) {
+          _showIncomingCall(
+            callerId: callerId,
+            callerName: callerName,
+            callerImage: callerImage,
+            offerSdp: offerSdp,
+            isVideo: isVideo,
+          );
+        }
+      } else if (type == 'call_end' || type == 'call_reject') {
+        _dismissIncomingCall();
       }
     });
+  }
+
+  void _showIncomingCall({
+    required String callerId,
+    required String callerName,
+    required String callerImage,
+    required String offerSdp,
+    required bool isVideo,
+  }) {
+    _dismissIncomingCall();
+    _incomingCallOverlay = OverlayEntry(
+      builder: (_) => IncomingCallScreen(
+        callerId: callerId,
+        callerName: callerName,
+        callerImage: callerImage,
+        offerSdp: offerSdp,
+        isVideo: isVideo,
+        onDismiss: _dismissIncomingCall,
+      ),
+    );
+    Overlay.of(context).insert(_incomingCallOverlay!);
+  }
+
+  void _dismissIncomingCall() {
+    _incomingCallOverlay?.remove();
+    _incomingCallOverlay = null;
   }
 
   void _showNotificationPopup({

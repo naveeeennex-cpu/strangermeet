@@ -1831,16 +1831,31 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                           )
                         : VoiceRecordButton(
                             isEnabled: !_isUploading,
-                            onVoiceSent: (audioUrl, duration) async {
-                              await ref
-                                  .read(subGroupMessagesProvider(_providerKey)
-                                      .notifier)
-                                  .sendMessage(
-                                    duration.toString(),
-                                    imageUrl: audioUrl,
-                                    messageType: 'voice',
-                                  );
+                            onRecordingDone: (tempId, localPath, duration) async {
+                              ref.read(subGroupMessagesProvider(_providerKey).notifier)
+                                  .addLocalPending(CommunityMessage(
+                                id: tempId,
+                                communityId: widget.communityId,
+                                userId: _currentUserId ?? '',
+                                userName: '',
+                                message: duration.toString(),
+                                imageUrl: localPath,
+                                messageType: 'voice',
+                              ));
                               if (mounted) _scrollToBottom();
+                            },
+                            onUploadComplete: (tempId, audioUrl, duration) async {
+                              ref.read(subGroupMessagesProvider(_providerKey).notifier)
+                                  .removeMessage(tempId);
+                              await ref
+                                  .read(subGroupMessagesProvider(_providerKey).notifier)
+                                  .sendMessage(duration.toString(),
+                                      imageUrl: audioUrl, messageType: 'voice');
+                              if (mounted) _scrollToBottom();
+                            },
+                            onUploadFailed: (tempId) async {
+                              ref.read(subGroupMessagesProvider(_providerKey).notifier)
+                                  .removeMessage(tempId);
                             },
                           ),
                   ],
