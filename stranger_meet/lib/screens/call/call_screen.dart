@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -64,6 +65,9 @@ class _CallScreenState extends State<CallScreen> {
     _subscribeToCallService();
     _listenWs();
     _startCall();
+    if (widget.isVideo) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
   }
 
   void _subscribeToCallService() {
@@ -132,6 +136,7 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   void _leaveScreen() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -184,7 +189,8 @@ class _CallScreenState extends State<CallScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       body: widget.isVideo ? _buildVideoCall() : _buildVoiceCall(),
     );
   }
@@ -291,148 +297,230 @@ class _CallScreenState extends State<CallScreen> {
   // ── Video call UI ──────────────────────────────────────────────────────────
 
   Widget _buildVideoCall() {
+    final size = MediaQuery.of(context).size;
+    final topPad = MediaQuery.of(context).padding.top;
+    final botPad = MediaQuery.of(context).padding.bottom;
+
     return GestureDetector(
       onTap: _onTapScreen,
       behavior: HitTestBehavior.opaque,
-      child: Stack(
-        children: [
-          // Remote (full screen)
-          Positioned.fill(
-            child: _remoteRenderer.srcObject != null
-                ? RTCVideoView(_remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
+      child: SizedBox.expand(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // ── Remote video — true full screen ──────────────────────────
+            _remoteRenderer.srcObject != null
+                ? RTCVideoView(
+                    _remoteRenderer,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  )
                 : Container(
-                    color: const Color(0xFF1A1A1A),
+                    color: const Color(0xFF111111),
                     child: Center(
-                      child: CircleAvatar(
-                        radius: 70,
-                        backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.3),
-                        backgroundImage: widget.peerImage.isNotEmpty
-                            ? CachedNetworkImageProvider(widget.peerImage)
-                            : null,
-                        child: widget.peerImage.isEmpty
-                            ? Text(
-                                widget.peerName.isNotEmpty ? widget.peerName[0].toUpperCase() : '?',
-                                style: const TextStyle(fontSize: 52, color: Colors.white, fontWeight: FontWeight.w700),
-                              )
-                            : null,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 72,
+                            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.25),
+                            backgroundImage: widget.peerImage.isNotEmpty
+                                ? CachedNetworkImageProvider(widget.peerImage)
+                                : null,
+                            child: widget.peerImage.isEmpty
+                                ? Text(
+                                    widget.peerName.isNotEmpty ? widget.peerName[0].toUpperCase() : '?',
+                                    style: const TextStyle(fontSize: 52, color: Colors.white, fontWeight: FontWeight.w700),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(height: 20),
+                          Text(widget.peerName,
+                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          Text('Connecting video...',
+                              style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                        ],
                       ),
                     ),
                   ),
-          ),
 
-          // Local preview (small, top-right)
-          if (_localRenderer.srcObject != null)
+            // ── Top gradient ──────────────────────────────────────────────
             Positioned(
-              top: MediaQuery.of(context).padding.top + 16,
-              right: 16,
-              width: 100,
-              height: 140,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: RTCVideoView(
-                  _localRenderer,
-                  mirror: true,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+              top: 0, left: 0, right: 0,
+              height: topPad + 100,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                  ),
                 ),
               ),
             ),
 
-          // Status bar (top)
-          SafeArea(
-            child: AnimatedOpacity(
-              opacity: _controlsVisible ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 250),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            // ── Bottom gradient ───────────────────────────────────────────
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              height: 240 + botPad,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black.withOpacity(0.85), Colors.transparent],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Local PiP — bottom-right ──────────────────────────────────
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 200),
+              bottom: botPad + 180,
+              right: 16,
+              width: 110,
+              height: 160,
+              child: GestureDetector(
+                onTap: () {}, // prevent closing controls when tapping PiP
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _localRenderer.srcObject != null
+                          ? RTCVideoView(
+                              _localRenderer,
+                              mirror: true,
+                              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                            )
+                          : Container(color: const Color(0xFF2A2A2A),
+                              child: const Icon(Icons.videocam_off, color: Colors.white54, size: 28)),
+                      // Border
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white30, width: 1.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Top bar: name + timer ─────────────────────────────────────
+            Positioned(
+              top: topPad + 12,
+              left: 20,
+              right: 20,
+              child: AnimatedOpacity(
+                opacity: _controlsVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 250),
                 child: Row(
                   children: [
-                    Text(
-                      widget.peerName,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600, shadows: [Shadow(blurRadius: 8)]),
+                    // Back/minimise
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.arrow_back, color: Colors.white, size: 18),
+                      ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      _statusText,
-                      style: TextStyle(
-                        color: _callState == CallState.connected ? AppTheme.primaryColor : Colors.grey[300],
-                        fontSize: 14,
-                        shadows: const [Shadow(blurRadius: 8)],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(widget.peerName,
+                              style: const TextStyle(
+                                color: Colors.white, fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                shadows: [Shadow(blurRadius: 8, color: Colors.black)],
+                              )),
+                          Text(
+                            _statusText,
+                            style: TextStyle(
+                              color: _callState == CallState.connected
+                                  ? AppTheme.primaryColor
+                                  : Colors.white70,
+                              fontSize: 13,
+                              shadows: const [Shadow(blurRadius: 6, color: Colors.black)],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-          ),
 
-          // Controls (bottom)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: AnimatedOpacity(
+            // ── Bottom controls ───────────────────────────────────────────
+            AnimatedOpacity(
               opacity: _controlsVisible ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 250),
-              child: _buildVideoControls(),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(24, 0, 24, botPad + 36),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Top control row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _ControlButton(
+                            icon: _callService.isMuted ? Icons.mic_off : Icons.mic,
+                            label: _callService.isMuted ? 'Unmute' : 'Mute',
+                            active: _callService.isMuted,
+                            onTap: () { _callService.toggleMute(); setState(() {}); },
+                          ),
+                          _ControlButton(
+                            icon: _callService.isCameraOff ? Icons.videocam_off : Icons.videocam,
+                            label: _callService.isCameraOff ? 'Cam off' : 'Camera',
+                            active: _callService.isCameraOff,
+                            onTap: () { _callService.toggleCamera(); setState(() {}); },
+                          ),
+                          _ControlButton(
+                            icon: Icons.flip_camera_ios,
+                            label: 'Flip',
+                            onTap: () async { await _callService.switchCamera(); },
+                          ),
+                          _ControlButton(
+                            icon: _callService.isSpeakerOn ? Icons.volume_up : Icons.hearing,
+                            label: _callService.isSpeakerOn ? 'Speaker' : 'Earpiece',
+                            active: _callService.isSpeakerOn,
+                            onTap: () { _callService.toggleSpeaker(); setState(() {}); },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+                      // End call
+                      GestureDetector(
+                        onTap: () async { await _callService.endCall(); },
+                        child: Container(
+                          width: 72, height: 72,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.4), blurRadius: 16, spreadRadius: 2)],
+                          ),
+                          child: const Icon(Icons.call_end, color: Colors.white, size: 32),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVideoControls() {
-    return Container(
-      padding: EdgeInsets.only(
-        left: 24, right: 24, top: 20,
-        bottom: MediaQuery.of(context).padding.bottom + 24,
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
+          ],
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _ControlButton(
-                icon: _callService.isMuted ? Icons.mic_off : Icons.mic,
-                label: _callService.isMuted ? 'Unmute' : 'Mute',
-                onTap: () { _callService.toggleMute(); setState(() {}); },
-              ),
-              _ControlButton(
-                icon: _callService.isCameraOff ? Icons.videocam_off : Icons.videocam,
-                label: _callService.isCameraOff ? 'Camera off' : 'Camera',
-                onTap: () { _callService.toggleCamera(); setState(() {}); },
-              ),
-              _ControlButton(
-                icon: Icons.flip_camera_ios,
-                label: 'Flip',
-                onTap: () async { await _callService.switchCamera(); },
-              ),
-              _ControlButton(
-                icon: _callService.isSpeakerOn ? Icons.volume_up : Icons.hearing,
-                label: 'Speaker',
-                onTap: () { _callService.toggleSpeaker(); setState(() {}); },
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          GestureDetector(
-            onTap: () async { await _callService.endCall(); },
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-              child: const Icon(Icons.call_end, color: Colors.white, size: 32),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -444,8 +532,14 @@ class _ControlButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool active;
 
-  const _ControlButton({required this.icon, required this.label, required this.onTap});
+  const _ControlButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.active = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -455,13 +549,15 @@ class _ControlButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: 58,
+            height: 58,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: active
+                  ? Colors.white.withOpacity(0.9)
+                  : Colors.white.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: Colors.white, size: 26),
+            child: Icon(icon, color: active ? Colors.black87 : Colors.white, size: 26),
           ),
           const SizedBox(height: 6),
           Text(
