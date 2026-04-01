@@ -1406,6 +1406,23 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
     );
   }
 
+  /// Returns a clean display string for a location.
+  /// If it looks like raw "lat,lng" coords, formats them nicely.
+  String _cleanLocation(String location, double lat, double lng) {
+    if (location.isEmpty) {
+      return lat != 0 ? '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}' : 'Pinned on map';
+    }
+    // Detect raw coordinate string like "13.0780, 80.2538" or "13.078,80.2538"
+    final coordPattern = RegExp(r'^-?\d+\.\d+\s*,\s*-?\d+\.\d+$');
+    if (coordPattern.hasMatch(location.trim())) {
+      final parts = location.split(',');
+      final lat2 = double.tryParse(parts[0].trim()) ?? lat;
+      final lng2 = double.tryParse(parts[1].trim()) ?? lng;
+      return '${lat2.toStringAsFixed(4)}°N, ${lng2.toStringAsFixed(4)}°E';
+    }
+    return location;
+  }
+
   Set<Polyline> _buildPolylines() {
     if (!r.hasDropCoords) return {};
     List<LatLng> routePoints = [];
@@ -1478,19 +1495,21 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       body: Stack(
+        fit: StackFit.expand,
         children: [
           // ── Full-screen map ─────────────────────────────────────────────
-          Positioned.fill(
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: _mapCenter,
-                zoom: 11,
-              ),
-              markers: _buildMarkers(),
-              polylines: _buildPolylines(),
-              zoomControlsEnabled: false,
-              myLocationButtonEnabled: false,
-              mapToolbarEnabled: false,
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _mapCenter,
+              zoom: r.hasStartCoords && r.hasDropCoords ? 11 : 13,
+            ),
+            markers: _buildMarkers(),
+            polylines: _buildPolylines(),
+            zoomControlsEnabled: true,
+            myLocationButtonEnabled: false,
+            mapToolbarEnabled: false,
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).size.height * 0.42,
             ),
           ),
 
@@ -1508,20 +1527,22 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
           ),
 
           // ── Bottom draggable sheet ──────────────────────────────────────
-          DraggableScrollableSheet(
-            initialChildSize: 0.45,
-            minChildSize: 0.35,
-            maxChildSize: 0.90,
-            builder: (context, scrollController) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF111111),
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+          Positioned.fill(
+            child: DraggableScrollableSheet(
+              initialChildSize: 0.45,
+              minChildSize: 0.35,
+              maxChildSize: 0.92,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF111111),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  child: ListView(
+                    controller: scrollController,
+                    padding: EdgeInsets.fromLTRB(20, 12, 20,
+                        40 + MediaQuery.of(context).padding.bottom),
                   children: [
                     // Handle bar
                     Center(
@@ -1640,9 +1661,7 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
                                   style: TextStyle(
                                       color: Colors.grey[500], fontSize: 12)),
                               Text(
-                                r.startLocation.isNotEmpty
-                                    ? r.startLocation
-                                    : 'Pinned on map',
+                                _cleanLocation(r.startLocation, r.startLat, r.startLng),
                                 style: const TextStyle(
                                     color: Colors.white, fontSize: 14),
                               ),
@@ -1651,11 +1670,14 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
                         ),
                       ],
                     ),
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      width: 2,
-                      height: 24,
-                      color: AppTheme.primaryColor.withOpacity(0.4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.only(left: 9),
+                        width: 2,
+                        height: 22,
+                        color: AppTheme.primaryColor.withOpacity(0.5),
+                      ),
                     ),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1672,8 +1694,10 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
                                       color: Colors.grey[500], fontSize: 12)),
                               Text(
                                 r.totalDistanceKm > 0
-                                    ? '${r.totalDistanceKm.toStringAsFixed(1)} km road distance'
-                                    : 'Destination',
+                                    ? '${r.totalDistanceKm.toStringAsFixed(1)} km via road'
+                                    : r.hasDropCoords
+                                        ? '${r.dropLat.toStringAsFixed(4)}, ${r.dropLng.toStringAsFixed(4)}'
+                                        : 'Venue not pinned yet',
                                 style: const TextStyle(
                                     color: Colors.white, fontSize: 14),
                               ),
@@ -1867,6 +1891,7 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
                 ),
               );
             },
+            ),
           ),
         ],
       ),
