@@ -35,6 +35,8 @@ dependencies:
   path_provider: ^2.1.2
   flutter_webrtc: ^1.4.1
   wakelock_plus: ^1.2.8
+  google_maps_flutter: ^2.6.1
+  flutter_polyline_points: ^2.0.1
 
 dev_dependencies:
   flutter_test:

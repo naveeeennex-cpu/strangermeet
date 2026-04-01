@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
-from typing import List
+from typing import List, Optional
 from routers.chat import manager as ws_manager
 
+import math
+import httpx
 from schemas.community import (
     CommunityCreate, CommunityUpdate, CommunityResponse,
     CommunityPostCreate, CommunityPostResponse,
@@ -15,8 +17,59 @@ from schemas.community import (
     CommunityMemberResponse,
     SubGroupMemberResponse,
     ItineraryDayCreate, ItineraryDayResponse,
-    EventRideCreate, EventRideResponse, EventRidePassengerResponse,
+    EventRideCreate, EventRideResponse, EventRidePassengerResponse, JoinRideRequest,
 )
+
+
+GOOGLE_MAPS_API_KEY = "AIzaSyCRoRzp4kOtaSxQGKOBP4Ke8L1oe8Xn5zA"
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Fallback straight-line distance in km."""
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+async def _road_distance_km(
+    lat1: float, lng1: float,
+    lat2: float, lng2: float,
+    waypoints: Optional[list] = None,
+) -> tuple[float, str]:
+    """
+    Returns (road_distance_km, encoded_polyline) using Google Directions API.
+    Falls back to haversine + empty polyline on any error.
+    """
+    try:
+        params = {
+            "origin": f"{lat1},{lng1}",
+            "destination": f"{lat2},{lng2}",
+            "mode": "driving",
+            "key": GOOGLE_MAPS_API_KEY,
+        }
+        if waypoints:
+            params["waypoints"] = "|".join(f"{w[0]},{w[1]}" for w in waypoints)
+
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(
+                "https://maps.googleapis.com/maps/api/directions/json",
+                params=params,
+            )
+        data = resp.json()
+        if data.get("status") == "OK":
+            leg = data["routes"][0]["legs"][0]
+            dist_km = leg["distance"]["value"] / 1000.0
+            polyline = data["routes"][0]["overview_polyline"]["points"]
+            return round(dist_km, 2), polyline
+    except Exception:
+        pass
+    # Fallback
+    return round(_haversine_km(lat1, lng1, lat2, lng2), 2), ""
+
+
 from services.auth import get_current_user
 
 router = APIRouter(prefix="/api/communities", tags=["communities"])
@@ -1756,6 +1809,8 @@ def _event_row_to_response(row, creator_name=None, is_booked=False, participants
         community_name=row.get("community_name"),
         community_image=row.get("community_image"),
         is_past=is_past,
+        venue_lat=float(row.get("venue_lat") or 0),
+        venue_lng=float(row.get("venue_lng") or 0),
         created_at=row["created_at"],
     )
 
@@ -1894,11 +1949,12 @@ async def create_community_event(
 
     row = await pool.fetchrow(
         """INSERT INTO community_events (community_id, title, description, location, date, price, slots, image_url, created_by,
-           event_type, duration_days, difficulty, includes, excludes, meeting_point, end_date, max_altitude_m, total_distance_km)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *""",
+           event_type, duration_days, difficulty, includes, excludes, meeting_point, end_date, max_altitude_m, total_distance_km,
+           venue_lat, venue_lng)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *""",
         community_id, data.title, data.description, data.location, event_date, data.price, data.slots, data.image_url, user_id,
         data.event_type, data.duration_days, data.difficulty, data.includes, data.excludes, data.meeting_point, end_date,
-        data.max_altitude_m, data.total_distance_km
+        data.max_altitude_m, data.total_distance_km, data.venue_lat, data.venue_lng
     )
 
     return _event_row_to_response(row, creator_name=current_user["name"], is_booked=False, participants_count=0)
@@ -1984,11 +2040,13 @@ async def update_community_event(
         """UPDATE community_events
            SET title=$1, description=$2, location=$3, date=$4, price=$5, slots=$6, image_url=$7,
                event_type=$8, duration_days=$9, difficulty=$10, includes=$11, excludes=$12,
-               meeting_point=$13, end_date=$14, max_altitude_m=$15, total_distance_km=$16
-           WHERE id = $17 AND community_id = $18 RETURNING *""",
+               meeting_point=$13, end_date=$14, max_altitude_m=$15, total_distance_km=$16,
+               venue_lat=$17, venue_lng=$18
+           WHERE id = $19 AND community_id = $20 RETURNING *""",
         data.title, data.description, data.location, event_date, data.price, data.slots, data.image_url,
         data.event_type, data.duration_days, data.difficulty, data.includes, data.excludes,
         data.meeting_point, end_date, data.max_altitude_m, data.total_distance_km,
+        data.venue_lat, data.venue_lng,
         event_id, community_id
     )
 
@@ -2257,33 +2315,51 @@ async def _build_ride_response(pool, ride_row, user_id: str) -> dict:
     """Build a full EventRideResponse dict from a DB row."""
     ride_id = str(ride_row["id"])
 
-    # Driver info
+    # Driver info (include phone)
     driver = await pool.fetchrow(
-        "SELECT name, profile_image_url FROM users WHERE id = $1",
+        "SELECT name, profile_image_url, phone FROM users WHERE id = $1",
         ride_row["user_id"]
     )
 
-    # Passengers
+    # Passengers with pickup coords, fare, and phone
     passengers_rows = await pool.fetch(
-        """SELECT erp.id, erp.user_id, erp.created_at, u.name, u.profile_image_url
+        """SELECT erp.id, erp.user_id, erp.created_at,
+                  erp.pickup_lat, erp.pickup_lng, erp.pickup_location_name, erp.calculated_fare,
+                  u.name, u.profile_image_url, u.phone
            FROM event_ride_passengers erp
            JOIN users u ON u.id = erp.user_id
            WHERE erp.ride_id = $1
            ORDER BY erp.created_at""",
         ride_id
     )
+
+    is_driver = str(ride_row["user_id"]) == user_id
+    is_passenger = any(str(p["user_id"]) == user_id for p in passengers_rows)
+
+    # my_fare: fare for the requesting user if they are a passenger
+    my_fare = 0.0
+    for p in passengers_rows:
+        if str(p["user_id"]) == user_id:
+            my_fare = float(p["calculated_fare"] or 0)
+            break
+
     passengers = [
         {
             "id": str(p["id"]),
             "user_id": str(p["user_id"]),
             "user_name": p["name"],
             "user_profile_image": p["profile_image_url"] or "",
+            "user_phone": p["phone"] or "",
+            "pickup_lat": float(p["pickup_lat"] or 0),
+            "pickup_lng": float(p["pickup_lng"] or 0),
+            "pickup_location_name": p["pickup_location_name"] or "",
+            "calculated_fare": float(p["calculated_fare"] or 0),
             "joined_at": p["created_at"],
         }
         for p in passengers_rows
     ]
 
-    is_passenger = any(str(p["user_id"]) == user_id for p in passengers_rows)
+    rate_per_km = float(ride_row.get("rate_per_km") or 0)
 
     return {
         "id": ride_id,
@@ -2291,18 +2367,26 @@ async def _build_ride_response(pool, ride_row, user_id: str) -> dict:
         "user_id": str(ride_row["user_id"]),
         "driver_name": driver["name"] if driver else None,
         "driver_image": driver["profile_image_url"] if driver else "",
+        "driver_phone": driver["phone"] if driver else "",
         "vehicle_type": ride_row["vehicle_type"],
         "vehicle_model": ride_row["vehicle_model"] or "",
         "vehicle_color": ride_row["vehicle_color"] or "",
         "total_seats": ride_row["total_seats"],
         "available_seats": ride_row["available_seats"],
         "start_location": ride_row["start_location"] or "",
+        "start_lat": float(ride_row.get("start_lat") or 0),
+        "start_lng": float(ride_row.get("start_lng") or 0),
+        "drop_lat": float(ride_row.get("drop_lat") or 0),
+        "drop_lng": float(ride_row.get("drop_lng") or 0),
         "start_time": ride_row["start_time"],
-        "is_free": ride_row["is_free"],
-        "cost_per_person": ride_row["cost_per_person"] or 0,
+        "rate_per_km": rate_per_km,
+        "total_distance_km": float(ride_row.get("total_distance_km") or 0),
+        "route_polyline": ride_row.get("route_polyline") or "",
+        "is_free": rate_per_km == 0,
         "notes": ride_row["notes"] or "",
-        "is_driver": str(ride_row["user_id"]) == user_id,
+        "is_driver": is_driver,
         "is_passenger": is_passenger,
+        "my_fare": my_fare,
         "passengers": passengers,
         "created_at": ride_row["created_at"],
     }
@@ -2319,7 +2403,6 @@ async def create_event_ride(
     pool = request.app.state.pool
     user_id = current_user["id"]
 
-    # Must be enrolled in the event
     booking = await pool.fetchrow(
         "SELECT id FROM community_event_bookings WHERE event_id = $1 AND user_id = $2",
         event_id, user_id
@@ -2327,7 +2410,6 @@ async def create_event_ride(
     if not booking:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be enrolled in this event to offer a ride")
 
-    # Only one ride offer per event per user
     existing = await pool.fetchrow(
         "SELECT id FROM event_rides WHERE event_id = $1 AND user_id = $2",
         event_id, user_id
@@ -2335,18 +2417,36 @@ async def create_event_ride(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already have a ride offer for this event")
 
+    # Get drop location from event venue
+    event_row = await pool.fetchrow(
+        "SELECT venue_lat, venue_lng FROM community_events WHERE id = $1", event_id
+    )
+    drop_lat = float(event_row["venue_lat"] or 0) if event_row else 0
+    drop_lng = float(event_row["venue_lng"] or 0) if event_row else 0
+
+    # Calculate total road distance and get route polyline
+    total_distance = 0.0
+    route_polyline = ""
+    if ride_data.start_lat and ride_data.start_lng and drop_lat and drop_lng:
+        total_distance, route_polyline = await _road_distance_km(
+            ride_data.start_lat, ride_data.start_lng, drop_lat, drop_lng
+        )
+
     row = await pool.fetchrow(
         """INSERT INTO event_rides
            (event_id, user_id, vehicle_type, vehicle_model, vehicle_color,
-            total_seats, available_seats, start_location, start_time,
-            is_free, cost_per_person, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            total_seats, available_seats, start_location,
+            start_lat, start_lng, drop_lat, drop_lng,
+            start_time, rate_per_km, total_distance_km, notes, route_polyline)
+           VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
            RETURNING *""",
         event_id, user_id,
         ride_data.vehicle_type, ride_data.vehicle_model, ride_data.vehicle_color,
-        ride_data.total_seats, ride_data.total_seats,
-        ride_data.start_location, ride_data.start_time,
-        ride_data.is_free, ride_data.cost_per_person, ride_data.notes
+        ride_data.total_seats,
+        ride_data.start_location,
+        ride_data.start_lat, ride_data.start_lng, drop_lat, drop_lng,
+        ride_data.start_time, ride_data.rate_per_km, total_distance, ride_data.notes,
+        route_polyline,
     )
 
     return await _build_ride_response(pool, row, user_id)
@@ -2366,7 +2466,6 @@ async def list_event_rides(
         "SELECT * FROM event_rides WHERE event_id = $1 ORDER BY start_time",
         event_id
     )
-
     return [await _build_ride_response(pool, row, user_id) for row in rows]
 
 
@@ -2375,13 +2474,13 @@ async def join_event_ride(
     community_id: str,
     event_id: str,
     ride_id: str,
+    join_data: JoinRideRequest,
     request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     pool = request.app.state.pool
     user_id = current_user["id"]
 
-    # Must be enrolled
     booking = await pool.fetchrow(
         "SELECT id FROM community_event_bookings WHERE event_id = $1 AND user_id = $2",
         event_id, user_id
@@ -2399,7 +2498,6 @@ async def join_event_ride(
     if ride["available_seats"] <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No seats available")
 
-    # Check already joined
     existing = await pool.fetchrow(
         "SELECT id FROM event_ride_passengers WHERE ride_id = $1 AND user_id = $2",
         ride_id, user_id
@@ -2407,11 +2505,30 @@ async def join_event_ride(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already joined this ride")
 
+    # Calculate fare from pickup to drop using real road distance
+    rate_per_km = float(ride.get("rate_per_km") or 0)
+    calculated_fare = 0.0
+    if rate_per_km > 0 and join_data.pickup_lat and join_data.pickup_lng:
+        drop_lat = float(ride.get("drop_lat") or 0)
+        drop_lng = float(ride.get("drop_lng") or 0)
+        if drop_lat and drop_lng:
+            dist, _ = await _road_distance_km(
+                join_data.pickup_lat, join_data.pickup_lng, drop_lat, drop_lng
+            )
+            calculated_fare = round(dist * rate_per_km, 2)
+    elif rate_per_km > 0:
+        # No midpoint — charge full ride fare
+        calculated_fare = round(float(ride.get("total_distance_km") or 0) * rate_per_km, 2)
+
     async with pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute(
-                "INSERT INTO event_ride_passengers (ride_id, user_id) VALUES ($1, $2)",
-                ride_id, user_id
+                """INSERT INTO event_ride_passengers
+                   (ride_id, user_id, pickup_lat, pickup_lng, pickup_location_name, calculated_fare)
+                   VALUES ($1, $2, $3, $4, $5, $6)""",
+                ride_id, user_id,
+                join_data.pickup_lat, join_data.pickup_lng,
+                join_data.pickup_location_name, calculated_fare
             )
             await conn.execute(
                 "UPDATE event_rides SET available_seats = available_seats - 1 WHERE id = $1",

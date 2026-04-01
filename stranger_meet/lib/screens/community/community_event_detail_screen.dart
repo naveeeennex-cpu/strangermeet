@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../config/theme.dart';
 import '../../models/community.dart';
@@ -314,6 +315,8 @@ class _CommunityEventDetailScreenState
                     eventId: widget.eventId,
                     eventTitle: event.title,
                     meetingPoint: event.meetingPoint,
+                    venueLat: event.venueLat,
+                    venueLng: event.venueLng,
                   ),
                 ),
               ),
@@ -1128,6 +1131,19 @@ class _BookingDetailsTab extends StatelessWidget {
           }),
         ],
 
+        // Venue map
+        const SizedBox(height: 24),
+        const Text(
+          'Venue on Map',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 12),
+        _VenueMapSection(
+          venueLat: event.venueLat,
+          venueLng: event.venueLng,
+          locationName: event.location,
+        ),
+
         // Trip details grid
         const SizedBox(height: 24),
         const Text(
@@ -1507,6 +1523,14 @@ class _OverviewTabState extends State<_OverviewTab> {
           subtitle: 'Event location',
         ),
 
+        // Venue map
+        const SizedBox(height: 16),
+        _VenueMapSection(
+          venueLat: event.venueLat,
+          venueLng: event.venueLng,
+          locationName: event.location,
+        ),
+
         // Enrollment progress
         if (event.slots > 0) ...[
           const SizedBox(height: 20),
@@ -1686,6 +1710,181 @@ class _OverviewTabState extends State<_OverviewTab> {
         ],
 
         const SizedBox(height: 100),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Venue Map Section — shown in both Trip and Event detail tabs
+// ─────────────────────────────────────────────────────────────────────────────
+class _VenueMapSection extends StatelessWidget {
+  final double venueLat;
+  final double venueLng;
+  final String locationName;
+
+  const _VenueMapSection({
+    required this.venueLat,
+    required this.venueLng,
+    required this.locationName,
+  });
+
+  bool get _hasCoords => venueLat != 0 && venueLng != 0;
+
+  Future<void> _openDirections() async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$venueLat,$venueLng',
+    );
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  Future<void> _openInMaps() async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$venueLat,$venueLng',
+    );
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (!_hasCoords) {
+      // No pin yet — show placeholder tappable card
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[900] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: isDark ? Colors.grey[800]! : Colors.grey[300]!),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.location_off_outlined, color: Colors.grey[500], size: 22),
+            const SizedBox(width: 12),
+            Text(
+              locationName.isNotEmpty ? locationName : 'Venue not pinned yet',
+              style: TextStyle(color: Colors.grey[500], fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final venueLatLng = LatLng(venueLat, venueLng);
+
+    return Column(
+      children: [
+        // Map preview
+        ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+          child: SizedBox(
+            height: 200,
+            child: GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: venueLatLng,
+                zoom: 15,
+              ),
+              markers: {
+                Marker(
+                  markerId: const MarkerId('venue'),
+                  position: venueLatLng,
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueRed),
+                  infoWindow: InfoWindow(
+                    title: 'Venue',
+                    snippet: locationName,
+                  ),
+                ),
+              },
+              zoomControlsEnabled: false,
+              myLocationButtonEnabled: false,
+              mapToolbarEnabled: false,
+              liteModeEnabled: true,
+              onTap: (_) => _openInMaps(),
+            ),
+          ),
+        ),
+
+        // Action row below map
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius:
+                const BorderRadius.vertical(bottom: Radius.circular(14)),
+            border: Border.all(
+                color: isDark ? Colors.grey[800]! : Colors.grey[200]!),
+          ),
+          child: Row(
+            children: [
+              // Address
+              Expanded(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on,
+                              color: Colors.red, size: 16),
+                          const SizedBox(width: 6),
+                          const Text('Venue',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.red)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        locationName.isNotEmpty
+                            ? locationName
+                            : '${venueLat.toStringAsFixed(5)}, ${venueLng.toStringAsFixed(5)}',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).textTheme.bodyLarge?.color),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Directions button
+              GestureDetector(
+                onTap: _openDirections,
+                child: Container(
+                  margin: const EdgeInsets.all(10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.directions, color: Colors.white, size: 18),
+                      SizedBox(width: 6),
+                      Text('Directions',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

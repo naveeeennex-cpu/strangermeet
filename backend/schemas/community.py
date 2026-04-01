@@ -149,6 +149,8 @@ class CommunityEventCreate(BaseModel):
     end_date: Optional[datetime] = None
     max_altitude_m: float = 0
     total_distance_km: float = 0
+    venue_lat: float = 0
+    venue_lng: float = 0
 
     @field_validator('date', mode='before')
     @classmethod
@@ -189,6 +191,8 @@ class CommunityEventResponse(BaseModel):
     community_name: Optional[str] = None
     community_image: Optional[str] = None
     is_past: bool = False
+    venue_lat: float = 0
+    venue_lng: float = 0
     created_at: datetime
 
 
@@ -258,10 +262,11 @@ class EventRideCreate(BaseModel):
     vehicle_model: str = ""
     vehicle_color: str = ""
     total_seats: int = 1
-    start_location: str
+    start_location: str              # human-readable address
+    start_lat: float = 0
+    start_lng: float = 0
     start_time: datetime
-    is_free: bool = True
-    cost_per_person: float = 0
+    rate_per_km: float = 0           # 0 = free ride
     notes: str = ""
 
     @field_validator('start_time', mode='before')
@@ -276,11 +281,22 @@ class EventRideCreate(BaseModel):
         return v
 
 
+class JoinRideRequest(BaseModel):
+    pickup_lat: float = 0
+    pickup_lng: float = 0
+    pickup_location_name: str = ""
+
+
 class EventRidePassengerResponse(BaseModel):
     id: str
     user_id: str
     user_name: Optional[str] = None
     user_profile_image: Optional[str] = None
+    user_phone: Optional[str] = None
+    pickup_lat: float = 0
+    pickup_lng: float = 0
+    pickup_location_name: str = ""
+    calculated_fare: float = 0
     joined_at: datetime
 
 
@@ -290,17 +306,25 @@ class EventRideResponse(BaseModel):
     user_id: str
     driver_name: Optional[str] = None
     driver_image: Optional[str] = None
+    driver_phone: Optional[str] = None
     vehicle_type: str = "car"
     vehicle_model: str = ""
     vehicle_color: str = ""
     total_seats: int = 1
     available_seats: int = 1
     start_location: str = ""
+    start_lat: float = 0
+    start_lng: float = 0
+    drop_lat: float = 0
+    drop_lng: float = 0
     start_time: datetime
+    rate_per_km: float = 0
+    total_distance_km: float = 0
+    route_polyline: str = ""
     is_free: bool = True
-    cost_per_person: float = 0
     notes: str = ""
     is_driver: bool = False
     is_passenger: bool = False
+    my_fare: float = 0               # fare pre-calculated for the requesting user
     passengers: List[EventRidePassengerResponse] = []
     created_at: datetime

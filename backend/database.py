@@ -555,6 +555,25 @@ async def init_db():
         await conn.execute("ALTER TABLE communities ADD COLUMN IF NOT EXISTS admin_only_chat BOOLEAN DEFAULT false")
         await conn.execute("ALTER TABLE sub_groups ADD COLUMN IF NOT EXISTS admin_only_chat BOOLEAN DEFAULT false")
 
+        # Event venue GPS coordinates (for ride sharing drop-off point)
+        await conn.execute("ALTER TABLE community_events ADD COLUMN IF NOT EXISTS venue_lat FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE community_events ADD COLUMN IF NOT EXISTS venue_lng FLOAT DEFAULT 0")
+
+        # Ride sharing: GPS coordinates + km-based fare
+        await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS start_lat FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS start_lng FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS drop_lat FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS drop_lng FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS rate_per_km FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS total_distance_km FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS route_polyline TEXT DEFAULT ''")
+
+        # Ride passengers: midpoint pickup + calculated fare
+        await conn.execute("ALTER TABLE event_ride_passengers ADD COLUMN IF NOT EXISTS pickup_lat FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE event_ride_passengers ADD COLUMN IF NOT EXISTS pickup_lng FLOAT DEFAULT 0")
+        await conn.execute("ALTER TABLE event_ride_passengers ADD COLUMN IF NOT EXISTS pickup_location_name TEXT DEFAULT ''")
+        await conn.execute("ALTER TABLE event_ride_passengers ADD COLUMN IF NOT EXISTS calculated_fare FLOAT DEFAULT 0")
+
         # Event ride sharing tables
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS event_rides (

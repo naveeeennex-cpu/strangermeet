@@ -8,6 +8,9 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/theme.dart';
 import '../../models/message.dart';
@@ -366,6 +369,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _shareLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location services are disabled')));
+        return;
+      }
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+      if (permission == LocationPermission.deniedForever) return;
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      final lat = pos.latitude;
+      final lng = pos.longitude;
+      final msgContent = '$lat,$lng';
+
+      ref
+          .read(messagesProvider(widget.userId).notifier)
+          .sendMessage(msgContent, messageType: 'location');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not get location: $e')));
+      }
+    }
+  }
+
   Future<void> _handleMessageLongPress(Message message) async {
     final isOwn = message.senderId == _currentUserId;
     final isText = message.messageType == 'text';
@@ -662,6 +699,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Row(
                 children: [
                   IconButton(
+                    icon: Icon(Icons.location_on, color: Colors.grey[500]),
+                    onPressed: _shareLocation,
+                    tooltip: 'Share location',
+                  ),
+                  IconButton(
                     icon: Icon(Icons.image, color: Colors.grey[500]),
                     onPressed: _isUploading ? null : _pickAndSendImage,
                   ),
@@ -894,6 +936,7 @@ class _MessageBubbleState extends State<_MessageBubble>
     final isImage = messageType == 'image' && imageUrl.isNotEmpty;
     final isSharedPost = messageType == 'shared_post';
     final isVoice = messageType == 'voice' && imageUrl.isNotEmpty;
+    final isLocation = messageType == 'location';
 
     return AnimatedBuilder(
       animation: _animController,
@@ -917,9 +960,149 @@ class _MessageBubbleState extends State<_MessageBubble>
               time: time,
               status: status,
             )
-          : isSharedPost
-              ? _buildSharedPostCard(context, isMe, status, message, time, imageUrl)
-              : _buildRegularBubble(context, isMe, status, message, time, imageUrl, isImage),
+          : isLocation
+              ? _buildLocationBubble(context, isMe, status, message, time)
+              : isSharedPost
+                  ? _buildSharedPostCard(
+                      context, isMe, status, message, time, imageUrl)
+                  : _buildRegularBubble(
+                      context, isMe, status, message, time, imageUrl, isImage),
+    );
+  }
+
+  Widget _buildLocationBubble(BuildContext context, bool isMe, String status,
+      String message, String time) {
+    final parts = message.split(',');
+    if (parts.length < 2) {
+      return _buildRegularBubble(
+          context, isMe, status, message, time, '', false);
+    }
+    final lat = double.tryParse(parts[0].trim()) ?? 0;
+    final lng = double.tryParse(parts[1].trim()) ?? 0;
+    if (lat == 0 && lng == 0) {
+      return _buildRegularBubble(
+          context, isMe, status, message, time, '', false);
+    }
+
+    final venueLatLng = LatLng(lat, lng);
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        width: 260,
+        decoration: BoxDecoration(
+          color: isMe ? const Color(0xFF1B5E20) : const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isMe
+                ? Colors.green.withOpacity(0.4)
+                : const Color(0xFF333333),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Map preview
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(15)),
+              child: SizedBox(
+                height: 150,
+                width: double.infinity,
+                child: GoogleMap(
+                  initialCameraPosition:
+                      CameraPosition(target: venueLatLng, zoom: 15),
+                  markers: {
+                    Marker(
+                      markerId: const MarkerId('loc'),
+                      position: venueLatLng,
+                      icon: BitmapDescriptor.defaultMarkerWithHue(
+                          isMe
+                              ? BitmapDescriptor.hueGreen
+                              : BitmapDescriptor.hueRed),
+                    ),
+                  },
+                  zoomControlsEnabled: false,
+                  myLocationButtonEnabled: false,
+                  mapToolbarEnabled: false,
+                  liteModeEnabled: true,
+                  onTap: (_) async {
+                    final uri = Uri.parse(
+                        'https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+                    try {
+                      await launchUrl(uri,
+                          mode: LaunchMode.externalApplication);
+                    } catch (_) {}
+                  },
+                ),
+              ),
+            ),
+            // Bottom row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on, color: Colors.red, size: 16),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text('Shared Location',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
+                  ),
+                  GestureDetector(
+                    onTap: () async {
+                      final uri = Uri.parse(
+                          'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+                      try {
+                        await launchUrl(uri,
+                            mode: LaunchMode.externalApplication);
+                      } catch (_) {}
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('Directions',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Timestamp
+            Padding(
+              padding: const EdgeInsets.only(right: 10, bottom: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(time,
+                      style: TextStyle(
+                          color: Colors.grey[500], fontSize: 10)),
+                  if (isMe) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      status == 'read' ? Icons.done_all : Icons.done,
+                      size: 12,
+                      color: status == 'read'
+                          ? Colors.blue[300]
+                          : Colors.grey[500],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

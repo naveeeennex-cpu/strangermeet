@@ -10,6 +10,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../config/theme.dart';
 import '../../providers/admin_provider.dart';
 import '../../services/api_service.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
+import '../../widgets/map_location_picker.dart';
 
 class CreateTripScreen extends ConsumerStatefulWidget {
   final String communityId;
@@ -44,6 +46,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   final _meetingPointUrlController = TextEditingController();
   String? _coverImageUrl;
   bool _isUploadingCover = false;
+
+  // Venue coordinates (pinned on map)
+  double _venueLat = 0;
+  double _venueLng = 0;
+  String _venueLocationName = '';
 
   // Step 2: Schedule & Pricing
   DateTime _startDate = DateTime.now().add(const Duration(days: 7));
@@ -111,6 +118,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         _meetingPointController.text = mp;
       }
       _coverImageUrl = event['image_url'];
+      _venueLat = (event['venue_lat'] ?? 0).toDouble();
+      _venueLng = (event['venue_lng'] ?? 0).toDouble();
+      if (_venueLat != 0 || _venueLng != 0) {
+        _venueLocationName = event['location'] ?? '';
+      }
       final price = (event['price'] ?? 0).toDouble();
       _priceController.text = price.toString();
       _isFreeEntry = price <= 0;
@@ -258,6 +270,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         'slots': int.tryParse(_slotsController.text) ?? 0,
         'image_url': _coverImageUrl ?? '',
         'event_type': _selectedEventType,
+        'venue_lat': _venueLat,
+        'venue_lng': _venueLng,
       };
 
       if (_isTrip) {
@@ -588,6 +602,117 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           ),
           validator: (v) =>
               (v == null || v.trim().isEmpty) ? 'Location is required' : null,
+        ),
+        const SizedBox(height: 16),
+
+        // Venue Map Pin
+        _sectionHeader('Venue Pin on Map', theme),
+        const SizedBox(height: 4),
+        Text(
+          'Pin the exact venue so attendees can see routes and drivers can use it as the drop point.',
+          style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+        ),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: () async {
+            final result = await Navigator.of(context, rootNavigator: true).push<PickedLocation>(
+              MaterialPageRoute(
+                builder: (_) => MapLocationPicker(
+                  title: 'Pin Venue Location',
+                  confirmLabel: 'Set as Venue',
+                  initialLocation: (_venueLat != 0 || _venueLng != 0)
+                      ? LatLng(_venueLat, _venueLng)
+                      : null,
+                ),
+              ),
+            );
+            if (result != null) {
+              setState(() {
+                _venueLat = result.latLng.latitude;
+                _venueLng = result.latLng.longitude;
+                _venueLocationName = result.address;
+                // Auto-fill location text if empty
+                if (_locationController.text.trim().isEmpty) {
+                  _locationController.text = result.address;
+                }
+              });
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: (_venueLat != 0 || _venueLng != 0)
+                  ? AppTheme.primaryColor.withOpacity(0.1)
+                  : theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: (_venueLat != 0 || _venueLng != 0)
+                    ? AppTheme.primaryColor
+                    : theme.dividerColor,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  (_venueLat != 0 || _venueLng != 0)
+                      ? Icons.location_on
+                      : Icons.add_location_alt_outlined,
+                  color: (_venueLat != 0 || _venueLng != 0)
+                      ? AppTheme.primaryColor
+                      : Colors.grey,
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (_venueLat != 0 || _venueLng != 0)
+                            ? 'Venue pinned'
+                            : 'Tap to pin venue on map',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: (_venueLat != 0 || _venueLng != 0)
+                              ? AppTheme.primaryColor
+                              : Colors.grey,
+                        ),
+                      ),
+                      if (_venueLocationName.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          _venueLocationName,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ] else if (_venueLat != 0 || _venueLng != 0) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_venueLat.toStringAsFixed(5)}, ${_venueLng.toStringAsFixed(5)}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (_venueLat != 0 || _venueLng != 0)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Change',
+                        style: TextStyle(fontSize: 12, color: AppTheme.primaryColor),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.edit, size: 14, color: AppTheme.primaryColor),
+                    ],
+                  ),
+              ],
+            ),
+          ),
         ),
 
         if (_isTrip) ...[

@@ -296,6 +296,8 @@ class CommunityEvent {
   final String? communityName;
   final String? communityImage;
   final bool isPast;
+  final double venueLat;
+  final double venueLng;
   final DateTime? createdAt;
 
   CommunityEvent({
@@ -322,6 +324,8 @@ class CommunityEvent {
     this.communityName,
     this.communityImage,
     this.isPast = false,
+    this.venueLat = 0,
+    this.venueLng = 0,
     this.createdAt,
   });
 
@@ -362,6 +366,8 @@ class CommunityEvent {
       communityName: json['community_name'] ?? json['communityName'],
       communityImage: json['community_image'] ?? json['communityImage'],
       isPast: json['is_past'] ?? json['isPast'] ?? false,
+      venueLat: (json['venue_lat'] ?? 0).toDouble(),
+      venueLng: (json['venue_lng'] ?? 0).toDouble(),
       createdAt: parseUtcToLocal(json['created_at']) ?? parseUtcToLocal(json['createdAt']),
     );
   }
