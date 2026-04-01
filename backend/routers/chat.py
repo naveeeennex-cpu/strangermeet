@@ -662,6 +662,52 @@ async def websocket_chat(websocket: WebSocket, token: str):
                         },
                     )
 
+            elif msg_type == "call_log":
+                receiver_id = data.get("receiver_id")
+                duration = int(data.get("duration", 0))
+                is_video = bool(data.get("is_video", False))
+                status = data.get("status", "ended")   # 'ended' | 'missed' | 'declined'
+
+                if receiver_id:
+                    # Dedup: skip if a call message already exists between these two users in the last 2 minutes
+                    existing = await pool.fetchrow(
+                        """SELECT id FROM messages
+                           WHERE message_type = 'call'
+                           AND ((sender_id = $1 AND receiver_id = $2)
+                             OR (sender_id = $2 AND receiver_id = $1))
+                           AND timestamp > NOW() - INTERVAL '2 minutes'""",
+                        user_id, receiver_id,
+                    )
+                    if existing:
+                        continue
+
+                    call_kind = "video" if is_video else "voice"
+                    # message format: "{duration}:{kind}:{status}"
+                    call_message = f"{duration}:{call_kind}:{status}"
+
+                    row = await pool.fetchrow(
+                        """INSERT INTO messages
+                           (sender_id, receiver_id, message, message_type, image_url, status)
+                           VALUES ($1, $2, $3, 'call', '', 'read')
+                           RETURNING *""",
+                        user_id, receiver_id, call_message,
+                    )
+
+                    msg_data = {
+                        "type": "message",
+                        "id": str(row["id"]),
+                        "sender_id": str(user_id),
+                        "receiver_id": str(receiver_id),
+                        "message": call_message,
+                        "message_type": "call",
+                        "image_url": "",
+                        "timestamp": row["timestamp"].isoformat(),
+                        "status": "read",
+                        "is_read": True,
+                    }
+                    await manager.send_to_user(receiver_id, msg_data)
+                    await websocket.send_json(msg_data)
+
             elif msg_type == "ice_candidate":
                 receiver_id = data.get("receiver_id")
                 if receiver_id:

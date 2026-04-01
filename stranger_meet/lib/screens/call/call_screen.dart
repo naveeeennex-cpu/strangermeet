@@ -52,6 +52,10 @@ class _CallScreenState extends State<CallScreen> {
   bool _controlsVisible = true;
   Timer? _controlsHideTimer;
 
+  // Call history tracking
+  bool _weEndedCall = false;
+  bool _wasRejected = false;
+
   @override
   void initState() {
     super.initState();
@@ -103,7 +107,10 @@ class _CallScreenState extends State<CallScreen> {
       if (type == 'call_answer') {
         final sdp = data['sdp']?.toString();
         if (sdp != null) _callService.handleAnswer(sdp);
-      } else if (type == 'call_end' || type == 'call_reject') {
+      } else if (type == 'call_reject') {
+        _wasRejected = true;
+        _callService.handleRemoteEnd();
+      } else if (type == 'call_end') {
         _callService.handleRemoteEnd();
       } else if (type == 'ice_candidate') {
         final candidate = data['candidate']?.toString();
@@ -136,7 +143,40 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   void _leaveScreen() {
+    _callTimer?.cancel();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
+    // Save call history log
+    final duration = _elapsed.inSeconds;
+    if (_weEndedCall) {
+      if (duration > 0) {
+        // Connected call — we ended it; save log (backend deduplicates)
+        WebSocketService().sendCallLog(
+          widget.peerId,
+          duration: duration,
+          isVideo: widget.isVideo,
+          status: 'ended',
+        );
+      } else {
+        // We cancelled before it was answered
+        WebSocketService().sendCallLog(
+          widget.peerId,
+          duration: 0,
+          isVideo: widget.isVideo,
+          status: 'missed',
+        );
+      }
+    } else if (_wasRejected) {
+      // They declined our call
+      WebSocketService().sendCallLog(
+        widget.peerId,
+        duration: 0,
+        isVideo: widget.isVideo,
+        status: 'declined',
+      );
+    }
+    // If remote ended a connected call: they already sent the log; we'll receive it via WS
+
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -278,7 +318,7 @@ class _CallScreenState extends State<CallScreen> {
 
           // End call button
           GestureDetector(
-            onTap: () async { await _callService.endCall(); },
+            onTap: () async { _weEndedCall = true; await _callService.endCall(); },
             child: Container(
               width: 80,
               height: 80,
@@ -503,7 +543,7 @@ class _CallScreenState extends State<CallScreen> {
                       const SizedBox(height: 28),
                       // End call
                       GestureDetector(
-                        onTap: () async { await _callService.endCall(); },
+                        onTap: () async { _weEndedCall = true; await _callService.endCall(); },
                         child: Container(
                           width: 72, height: 72,
                           decoration: BoxDecoration(
