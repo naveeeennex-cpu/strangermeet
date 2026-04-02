@@ -51,11 +51,13 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  final _messageFocusNode = FocusNode();
   String? _currentUserId;
   bool _isOnline = false;
   bool _isTyping = false;
   bool _isUploading = false;
   bool _hasText = false;
+  Message? _replyToMessage;
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
   StreamSubscription<void>? _reconnectSubscription;
 
@@ -174,6 +176,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.read(unreadCountProvider.notifier).fetchUnreadCount();
     _messageController.dispose();
     _scrollController.dispose();
+    _messageFocusNode.dispose();
     super.dispose();
   }
 
@@ -264,15 +267,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               _DarkDateSeparator(date: message.timestamp),
             if (showUnreadBanner)
               _UnreadMessagesBanner(count: unreadCount),
-            GestureDetector(
-              onLongPress: () => _handleMessageLongPress(message),
-              child: _MessageBubble(
-                message: message.message,
-                isMe: isMe,
-                status: message.status,
-                time: DateFormat('hh:mm a').format(message.timestamp),
-                imageUrl: message.imageUrl,
-                messageType: message.messageType,
+            _SwipeToReply(
+              isMe: isMe,
+              onReply: () => setState(() => _replyToMessage = message),
+              child: GestureDetector(
+                onLongPress: () => _handleMessageLongPress(message),
+                child: _MessageBubble(
+                  message: message.message,
+                  isMe: isMe,
+                  status: message.status,
+                  time: DateFormat('hh:mm a').format(message.timestamp),
+                  imageUrl: message.imageUrl,
+                  messageType: message.messageType,
+                ),
               ),
             ),
           ],
@@ -286,6 +293,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (text.isEmpty) return;
 
     _messageController.clear();
+    final reply = _replyToMessage;
+    if (_replyToMessage != null) setState(() => _replyToMessage = null);
 
     try {
       await ref
@@ -417,6 +426,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (action == null || !mounted) return;
 
     switch (action) {
+      case 'reply':
+        setState(() => _replyToMessage = message);
+        FocusScope.of(context).requestFocus(FocusNode());
+        Future.microtask(() => _messageFocusNode.requestFocus());
+        break;
       case 'edit':
         _showEditDialog(message);
         break;
@@ -688,7 +702,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           // Message input
           Container(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
             decoration: const BoxDecoration(
               color: _kInputBarBg,
               border: Border(
@@ -696,7 +709,64 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
             child: SafeArea(
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Reply preview bar
+                  if (_replyToMessage != null)
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 6),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1E1E1E),
+                        border: Border(
+                          left: BorderSide(color: AppTheme.primaryColor, width: 3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _replyToMessage!.senderId == _currentUserId
+                                      ? 'You'
+                                      : widget.userName,
+                                  style: const TextStyle(
+                                    color: AppTheme.primaryColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _replyToMessage!.messageType == 'voice'
+                                      ? '🎤 Voice message'
+                                      : _replyToMessage!.messageType == 'image'
+                                          ? '📷 Photo'
+                                          : _replyToMessage!.message,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close, color: Colors.grey[500], size: 18),
+                            onPressed: () => setState(() => _replyToMessage = null),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                    child: Row(
                 children: [
                   IconButton(
                     icon: Icon(Icons.location_on, color: Colors.grey[500]),
@@ -710,6 +780,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
+                      focusNode: _messageFocusNode,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Type a message...',
@@ -780,7 +851,88 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                 ],
               ),
+                  ),
+                ],
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Swipe-to-reply wrapper ───────────────────────────────────────────────────
+
+class _SwipeToReply extends StatefulWidget {
+  final Widget child;
+  final bool isMe;
+  final VoidCallback onReply;
+
+  const _SwipeToReply({
+    required this.child,
+    required this.isMe,
+    required this.onReply,
+  });
+
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<_SwipeToReply> {
+  double _dragOffset = 0;
+  bool _triggered = false;
+  static const double _threshold = 60.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragUpdate: (details) {
+        final delta = details.delta.dx;
+        // My messages: swipe left (negative). Others: swipe right (positive)
+        final isValidDir = widget.isMe ? delta < 0 : delta > 0;
+        if (!isValidDir && _dragOffset == 0) return;
+        setState(() {
+          _dragOffset = (_dragOffset + delta).clamp(
+            widget.isMe ? -_threshold : 0.0,
+            widget.isMe ? 0.0 : _threshold,
+          );
+        });
+        if (!_triggered && _dragOffset.abs() >= _threshold) {
+          _triggered = true;
+          widget.onReply();
+        }
+      },
+      onHorizontalDragEnd: (_) {
+        setState(() {
+          _dragOffset = 0;
+          _triggered = false;
+        });
+      },
+      child: Stack(
+        children: [
+          // Reply icon hint
+          if (_dragOffset.abs() > 10)
+            Positioned(
+              left: widget.isMe ? null : 0,
+              right: widget.isMe ? 0 : null,
+              top: 0,
+              bottom: 0,
+              child: Align(
+                alignment: Alignment.center,
+                child: Opacity(
+                  opacity: (_dragOffset.abs() / _threshold).clamp(0.0, 1.0),
+                  child: Icon(
+                    Icons.reply,
+                    color: AppTheme.primaryColor,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
+          Transform.translate(
+            offset: Offset(_dragOffset, 0),
+            child: widget.child,
           ),
         ],
       ),

@@ -10,7 +10,7 @@ class AuthService {
 
   static final _googleSignIn = GoogleSignIn(
     serverClientId:
-        '610696728606-hjv0463opi1e5umn1nas2e3589ss9dqv.apps.googleusercontent.com',
+        '594414222454-leq90b0c39cobg35krqdavdirkghdoej.apps.googleusercontent.com',
   );
 
   // ── Email / password ────────────────────────────────────────────────────────

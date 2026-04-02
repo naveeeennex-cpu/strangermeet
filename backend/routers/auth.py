@@ -23,7 +23,7 @@ SMTP_EMAIL = os.getenv("SMTP_EMAIL", "aptirix@gmail.com")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "nsfp awfz hkis nkop")
 GOOGLE_CLIENT_ID = os.getenv(
     "GOOGLE_CLIENT_ID",
-    "610696728606-hjv0463opi1e5umn1nas2e3589ss9dqv.apps.googleusercontent.com",
+    "594414222454-leq90b0c39cobg35krqdavdirkghdoej.apps.googleusercontent.com",
 )
 
 # In-memory OTP store: email → {code, expires_at}
@@ -163,12 +163,26 @@ async def _send_reset_otp_mail(to_email: str, code: str):
 
 # ── Email OTP endpoints ──────────────────────────────────────────────────────
 
+# ── TESTING MODE: OTP bypass ────────────────────────────────────────────────
+# Set to True to skip email sending and use fixed OTP "123456"
+# Set back to False when SMTP / Resend is configured
+_TESTING_MODE = True
+
+
 @router.post("/send-email-otp")
 async def send_email_otp(request: Request):
     body = await request.json()
     email = (body.get("email") or "").strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email address")
+
+    if _TESTING_MODE:
+        _otp_store[email] = {
+            "code": "123456",
+            "expires_at": datetime.utcnow() + timedelta(minutes=10),
+        }
+        print(f"[OTP] Testing mode — code 123456 for {email}")
+        return {"message": "OTP sent to email"}
 
     code = str(random.randint(100000, 999999))
     _otp_store[email] = {
@@ -216,6 +230,14 @@ async def forgot_password(request: Request):
     user = await pool.fetchrow("SELECT id FROM users WHERE email = $1", email)
     if not user:
         raise HTTPException(status_code=404, detail="No account found with this email")
+
+    if _TESTING_MODE:
+        _reset_otp_store[email] = {
+            "code": "123456",
+            "expires_at": datetime.utcnow() + timedelta(minutes=10),
+        }
+        print(f"[OTP] Testing mode — reset code 123456 for {email}")
+        return {"message": "OTP sent to email"}
 
     code = str(random.randint(100000, 999999))
     _reset_otp_store[email] = {

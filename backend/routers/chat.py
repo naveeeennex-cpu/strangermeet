@@ -714,8 +714,8 @@ async def websocket_chat(websocket: WebSocket, token: str):
 
                     row = await pool.fetchrow(
                         """INSERT INTO messages
-                           (sender_id, receiver_id, message, message_type, image_url, status)
-                           VALUES ($1, $2, $3, 'call', '', 'read')
+                           (sender_id, receiver_id, message, message_type, image_url, status, is_read)
+                           VALUES ($1, $2, $3, 'call', '', 'read', TRUE)
                            RETURNING *""",
                         user_id, receiver_id, call_message,
                     )
