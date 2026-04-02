@@ -2388,7 +2388,6 @@ class _BottomBar extends StatelessWidget {
           ),
         ),
       ),
-    ),
     );
   }
 
