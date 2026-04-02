@@ -6,12 +6,14 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
 
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 import '../../config/theme.dart';
 import '../../models/user.dart';
 import '../../models/community.dart';
 import '../../providers/admin_provider.dart';
 import '../../providers/community_provider.dart';
 import '../../services/api_service.dart';
+import '../../widgets/map_location_picker.dart';
 
 class CommunityManageScreen extends ConsumerStatefulWidget {
   final String communityId;
@@ -167,6 +169,8 @@ class _CommunityManageScreenState
         text: existing?['description']?.toString() ?? '');
     final locationCtrl = TextEditingController(
         text: existing?['location']?.toString() ?? '');
+    double venueLat = (existing?['venue_lat'] ?? 0).toDouble();
+    double venueLng = (existing?['venue_lng'] ?? 0).toDouble();
     final priceCtrl = TextEditingController(
         text: existing != null ? (existing['price'] ?? 0).toString() : '0');
     final slotsCtrl = TextEditingController(
@@ -260,11 +264,85 @@ class _CommunityManageScreenState
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: locationCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Location',
-                        prefixIcon: Icon(Icons.location_on_outlined),
+                    // Map-based location picker
+                    GestureDetector(
+                      onTap: () async {
+                        final result = await Navigator.of(ctx, rootNavigator: true)
+                            .push<PickedLocation>(MaterialPageRoute(
+                          builder: (_) => MapLocationPicker(
+                            title: 'Set Event Location',
+                            confirmLabel: 'Set Location',
+                            initialLocation: (venueLat != 0 || venueLng != 0)
+                                ? LatLng(venueLat, venueLng)
+                                : null,
+                          ),
+                        ));
+                        if (result != null) {
+                          setSheetState(() {
+                            venueLat = result.latLng.latitude;
+                            venueLng = result.latLng.longitude;
+                            locationCtrl.text = result.address;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: (venueLat != 0 || venueLng != 0)
+                              ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                              : Theme.of(ctx).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: (venueLat != 0 || venueLng != 0)
+                                ? AppTheme.primaryColor
+                                : Theme.of(ctx).dividerColor,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              (venueLat != 0 || venueLng != 0)
+                                  ? Icons.location_on
+                                  : Icons.add_location_alt_outlined,
+                              color: (venueLat != 0 || venueLng != 0)
+                                  ? AppTheme.primaryColor
+                                  : Colors.grey,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    (venueLat != 0 || venueLng != 0)
+                                        ? 'Location pinned'
+                                        : 'Tap to set location on map',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: (venueLat != 0 || venueLng != 0)
+                                          ? AppTheme.primaryColor
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                  if (locationCtrl.text.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      locationCtrl.text,
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            if (venueLat != 0 || venueLng != 0)
+                              Icon(Icons.edit, size: 16, color: AppTheme.primaryColor),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -465,6 +543,8 @@ class _CommunityManageScreenState
                             'slots': int.tryParse(slotsCtrl.text) ?? 0,
                             'image_url': imageUrlCtrl.text.trim(),
                             'event_type': selectedEventType,
+                            'venue_lat': venueLat,
+                            'venue_lng': venueLng,
                           };
 
                           try {
