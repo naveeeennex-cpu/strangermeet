@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from typing import List, Optional
-from routers.chat import manager as ws_manager, active_group_calls
+from routers.chat import manager as ws_manager, active_group_calls, _archive_message
+from services.encryption import encrypt_message, decrypt_message
 
 import math
 import httpx
@@ -806,24 +807,39 @@ async def send_community_message(
         if not member or member["role"] != "admin":
             raise HTTPException(status_code=403, detail="Only admins can send messages in this chat")
 
+    # Encrypt before storing
+    plain_message = data.message
+    plain_image = data.image_url or ""
+    encrypted_msg = encrypt_message(plain_message)
+    encrypted_img = encrypt_message(plain_image) if plain_image else ""
+
     row = await pool.fetchrow(
         "INSERT INTO community_messages (community_id, user_id, message, image_url, message_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-        community_id, user_id, data.message, data.image_url, data.message_type
+        community_id, user_id, encrypted_msg, encrypted_img, data.message_type
     )
 
+    # Archive
+    await _archive_message(
+        pool, original_id=row["id"], source_table="community_messages",
+        sender_id=user_id, community_id=community_id,
+        encrypted_message=encrypted_msg, encrypted_image_url=encrypted_img,
+        message_type=data.message_type, original_timestamp=row["timestamp"],
+    )
+
+    # Return decrypted to client
     response = CommunityMessageResponse(
         id=str(row["id"]),
         community_id=str(row["community_id"]),
         user_id=str(row["user_id"]),
         user_name=current_user["name"],
         user_profile_image=current_user.get("profile_image_url"),
-        message=row["message"],
+        message=plain_message,
         timestamp=row["timestamp"],
-        image_url=row.get("image_url") or "",
-        message_type=row.get("message_type") or "text",
+        image_url=plain_image,
+        message_type=data.message_type or "text",
     )
 
-    # WebSocket fan-out to all community members
+    # WebSocket fan-out to all community members (send decrypted)
     try:
         member_rows = await pool.fetch(
             "SELECT user_id::text FROM community_members WHERE community_id = $1 AND status = 'active'",
@@ -838,9 +854,9 @@ async def send_community_message(
             "user_id": response.user_id,
             "user_name": response.user_name or "",
             "user_profile_image": response.user_profile_image or "",
-            "message": response.message,
+            "message": plain_message,
             "timestamp": response.timestamp.isoformat(),
-            "image_url": response.image_url,
+            "image_url": plain_image,
             "message_type": response.message_type,
         }
         await ws_manager.broadcast_to_group(member_ids, ws_payload, exclude_user_id=user_id)
@@ -877,9 +893,9 @@ async def get_community_messages(
             user_id=str(row["user_id"]),
             user_name=row["user_name"],
             user_profile_image=row.get("user_profile_image"),
-            message=row["message"],
+            message=decrypt_message(row["message"]),
             timestamp=row["timestamp"],
-            image_url=row.get("image_url") or "",
+            image_url=decrypt_message(row.get("image_url") or ""),
             message_type=row.get("message_type") or "text",
             is_deleted=row.get("is_deleted") or False,
             deleted_by=str(row["deleted_by"]) if row.get("deleted_by") else None,
@@ -912,9 +928,10 @@ async def edit_community_message(
     if not msg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
 
+    encrypted_text = encrypt_message(new_text)
     await pool.execute(
         "UPDATE community_messages SET message = $1 WHERE id = $2",
-        new_text, message_id,
+        encrypted_text, message_id,
     )
     return {"status": "ok", "message": new_text}
 
@@ -949,10 +966,10 @@ async def delete_community_message(
     if str(msg["user_id"]) != user_id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
-    # Soft delete
+    # Soft delete (archive keeps original)
     await pool.execute(
-        "UPDATE community_messages SET is_deleted = true, deleted_by = $1, message = 'This message was deleted' WHERE id = $2",
-        user_id, message_id
+        "UPDATE community_messages SET is_deleted = true, deleted_by = $1, message = $2 WHERE id = $3",
+        user_id, encrypt_message("This message was deleted"), message_id
     )
     return {"detail": "Message deleted", "deleted_by": current_user["name"]}
 
@@ -1340,24 +1357,39 @@ async def send_sub_group_message(
         if not cm or cm["role"] != "admin":
             raise HTTPException(status_code=403, detail="Only admins can send messages in this group")
 
+    # Encrypt before storing
+    plain_message = data.message
+    plain_image = data.image_url or ""
+    encrypted_msg = encrypt_message(plain_message)
+    encrypted_img = encrypt_message(plain_image) if plain_image else ""
+
     row = await pool.fetchrow(
         "INSERT INTO sub_group_messages (sub_group_id, user_id, message, image_url, message_type) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-        group_id, user_id, data.message, data.image_url, data.message_type
+        group_id, user_id, encrypted_msg, encrypted_img, data.message_type
     )
 
+    # Archive
+    await _archive_message(
+        pool, original_id=row["id"], source_table="sub_group_messages",
+        sender_id=user_id, sub_group_id=group_id,
+        encrypted_message=encrypted_msg, encrypted_image_url=encrypted_img,
+        message_type=data.message_type, original_timestamp=row["timestamp"],
+    )
+
+    # Return decrypted to client
     response = SubGroupMessageResponse(
         id=str(row["id"]),
         sub_group_id=str(row["sub_group_id"]),
         user_id=str(row["user_id"]),
         user_name=current_user["name"],
         user_profile_image=current_user.get("profile_image_url"),
-        message=row["message"],
+        message=plain_message,
         timestamp=row["timestamp"],
-        image_url=row.get("image_url") or "",
-        message_type=row.get("message_type") or "text",
+        image_url=plain_image,
+        message_type=data.message_type or "text",
     )
 
-    # WebSocket fan-out to all sub-group members
+    # WebSocket fan-out (send decrypted)
     try:
         member_rows = await pool.fetch(
             "SELECT user_id::text FROM sub_group_members WHERE sub_group_id = $1 AND status = 'active'",
@@ -1373,9 +1405,9 @@ async def send_sub_group_message(
             "user_id": response.user_id,
             "user_name": response.user_name or "",
             "user_profile_image": response.user_profile_image or "",
-            "message": response.message,
+            "message": plain_message,
             "timestamp": response.timestamp.isoformat(),
-            "image_url": response.image_url,
+            "image_url": plain_image,
             "message_type": response.message_type,
         }
         await ws_manager.broadcast_to_group(member_ids, ws_payload, exclude_user_id=user_id)
@@ -1413,9 +1445,9 @@ async def get_sub_group_messages(
             user_id=str(row["user_id"]),
             user_name=row["user_name"],
             user_profile_image=row.get("user_profile_image"),
-            message=row["message"],
+            message=decrypt_message(row["message"]),
             timestamp=row["timestamp"],
-            image_url=row.get("image_url") or "",
+            image_url=decrypt_message(row.get("image_url") or ""),
             message_type=row.get("message_type") or "text",
             is_deleted=row.get("is_deleted") or False,
             deleted_by=str(row["deleted_by"]) if row.get("deleted_by") else None,
@@ -1449,9 +1481,10 @@ async def edit_sub_group_message(
     if not msg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
 
+    encrypted_text = encrypt_message(new_text)
     await pool.execute(
         "UPDATE sub_group_messages SET message = $1 WHERE id = $2",
-        new_text, message_id,
+        encrypted_text, message_id,
     )
     return {"status": "ok", "message": new_text}
 
@@ -1487,10 +1520,10 @@ async def delete_sub_group_message(
     if str(msg["user_id"]) != user_id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
-    # Soft delete
+    # Soft delete (archive keeps original)
     await pool.execute(
-        "UPDATE sub_group_messages SET is_deleted = true, deleted_by = $1, message = 'This message was deleted' WHERE id = $2",
-        user_id, message_id
+        "UPDATE sub_group_messages SET is_deleted = true, deleted_by = $1, message = $2 WHERE id = $3",
+        user_id, encrypt_message("This message was deleted"), message_id
     )
     return {"detail": "Message deleted", "deleted_by": current_user["name"]}
 
@@ -1594,9 +1627,10 @@ async def create_poll(
     poll_id = str(row["id"])
 
     # Also insert a message of type 'poll' referencing this poll
+    encrypted_question = encrypt_message(question)
     await pool.execute(
         "INSERT INTO sub_group_messages (sub_group_id, user_id, message, message_type, image_url) VALUES ($1, $2, $3, 'poll', $4)",
-        group_id, user_id, question, poll_id
+        group_id, user_id, encrypted_question, poll_id
     )
 
     return {
@@ -1758,10 +1792,13 @@ async def share_location(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="latitude and longitude are required")
 
     location_data = json_lib.dumps({"lat": lat, "lng": lng, "address": address})
+    plain_loc_msg = address or "Shared location"
+    encrypted_loc_msg = encrypt_message(plain_loc_msg)
+    encrypted_loc_data = encrypt_message(location_data)
 
     row = await pool.fetchrow(
         "INSERT INTO sub_group_messages (sub_group_id, user_id, message, message_type, image_url) VALUES ($1, $2, $3, 'location', $4) RETURNING *",
-        group_id, user_id, address or "Shared location", location_data
+        group_id, user_id, encrypted_loc_msg, encrypted_loc_data
     )
 
     return {
@@ -1770,9 +1807,9 @@ async def share_location(
         "user_id": str(row["user_id"]),
         "user_name": current_user["name"],
         "user_profile_image": current_user.get("profile_image_url"),
-        "message": row["message"],
+        "message": plain_loc_msg,
         "timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,
-        "image_url": row.get("image_url") or "",
+        "image_url": location_data,
         "message_type": "location",
     }
 

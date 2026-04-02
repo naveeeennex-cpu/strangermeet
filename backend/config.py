@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxyZ2pudHdkbnR3cWpuZXdhcm1rIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDE2MzkwMywiZXhwIjoyMDg5NzM5OTAzfQ.3_gwJiIh0o4BmnOjRKzyvpIBzCQ1TnjVs8PXwBT0t-Q"
     SUPABASE_BUCKET: str = "media"
 
+    # Encryption
+    MASTER_ENCRYPTION_KEY: str = "7f65ce720975d0ea198bb6d656005b59762ac51dd4aa414f16363640061b72e4"
+
     # Razorpay (optional)
     RAZORPAY_KEY_ID: Optional[str] = None
     RAZORPAY_KEY_SECRET: Optional[str] = None

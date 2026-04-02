@@ -7,6 +7,7 @@ import logging
 from schemas.message import MessageCreate, MessageResponse
 from services.auth import get_current_user
 from services.fcm import send_push
+from services.encryption import encrypt_message, decrypt_message
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,26 @@ active_group_calls: dict[str, dict] = {}
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 
 
+async def _archive_message(pool, *, original_id, source_table, sender_id,
+                           receiver_id=None, community_id=None, sub_group_id=None,
+                           encrypted_message="", encrypted_image_url="",
+                           message_type="text", original_timestamp=None):
+    """Insert into message_archive. Failures are logged, never block delivery."""
+    try:
+        await pool.execute(
+            """INSERT INTO message_archive
+               (original_message_id, source_table, sender_id, receiver_id,
+                community_id, sub_group_id, encrypted_message, encrypted_image_url,
+                message_type, original_timestamp)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)""",
+            original_id, source_table, sender_id, receiver_id,
+            community_id, sub_group_id, encrypted_message, encrypted_image_url,
+            message_type, original_timestamp or datetime.utcnow(),
+        )
+    except Exception as exc:
+        logger.error("Archive insert failed: %s", exc)
+
+
 @router.post("", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 async def send_message(
     message_data: MessageCreate,
@@ -125,6 +146,11 @@ async def send_message(
     # Determine initial status: 'delivered' if receiver is online, 'sent' otherwise
     initial_status = 'delivered' if manager.is_online(message_data.receiver_id) else 'sent'
 
+    # Encrypt message before storing
+    plain_message = message_data.message
+    encrypted_msg = encrypt_message(plain_message)
+    encrypted_img = encrypt_message(message_data.image_url) if message_data.image_url else ""
+
     try:
         row = await pool.fetchrow(
             """
@@ -134,8 +160,8 @@ async def send_message(
             """,
             sender_id,
             message_data.receiver_id,
-            message_data.message,
-            message_data.image_url,
+            encrypted_msg,
+            encrypted_img,
             message_data.message_type,
             initial_status,
         )
@@ -145,19 +171,28 @@ async def send_message(
             detail=f"Failed to send message: {str(e)}",
         )
 
-    msg_status = row.get("status") or initial_status
+    # Archive the encrypted message
+    await _archive_message(
+        pool, original_id=row["id"], source_table="messages",
+        sender_id=sender_id, receiver_id=message_data.receiver_id,
+        encrypted_message=encrypted_msg, encrypted_image_url=encrypted_img,
+        message_type=message_data.message_type, original_timestamp=row["timestamp"],
+    )
 
+    msg_status = dict(row).get("status") or initial_status
+
+    # Return DECRYPTED plaintext to the client
     response_data = MessageResponse(
         id=str(row["id"]),
         sender_id=str(row["sender_id"]),
         receiver_id=str(row["receiver_id"]),
-        message=row["message"],
+        message=plain_message,
         timestamp=row["timestamp"],
         is_read=row["is_read"],
         status=msg_status,
         sender_name=current_user["name"],
-        image_url=row["image_url"] or "",
-        message_type=row["message_type"] or "text",
+        image_url=message_data.image_url or "",
+        message_type=message_data.message_type or "text",
     )
 
     # Broadcast via WebSocket to both sender and receiver for real-time updates
@@ -304,12 +339,12 @@ async def get_conversation(
             id=str(row["id"]),
             sender_id=str(row["sender_id"]),
             receiver_id=str(row["receiver_id"]),
-            message=row["message"],
+            message=decrypt_message(row["message"]),
             timestamp=row["timestamp"],
             is_read=row["is_read"],
-            status=row.get("status") or ("read" if row["is_read"] else "sent"),
+            status=dict(row).get("status") or ("read" if row["is_read"] else "sent"),
             sender_name=row["sender_name"],
-            image_url=row.get("image_url") or "",
+            image_url=decrypt_message(row.get("image_url") or ""),
             message_type=row.get("message_type") or "text",
         )
         for row in rows
@@ -370,7 +405,7 @@ async def get_conversations(
             "user_id": pid,
             "user_name": row["partner_name"],
             "user_image": row["partner_image"] or None,
-            "last_message": row["message"],
+            "last_message": decrypt_message(row["message"]),
             "last_message_time": row["timestamp"].isoformat(),
             "unread_count": unread_map.get(pid, 0),
         })
@@ -396,7 +431,7 @@ async def get_conversations(
             "user_id": str(row["id"]),
             "user_name": row["name"],
             "user_image": row["image_url"] or None,
-            "last_message": row["last_msg"] or "",
+            "last_message": decrypt_message(row["last_msg"] or ""),
             "last_message_time": row["last_ts"].isoformat() if row["last_ts"] else None,
             "unread_count": 0,
         })
@@ -423,7 +458,7 @@ async def get_conversations(
             "user_id": str(row["id"]),
             "user_name": row["name"],
             "user_image": row["community_image"] or None,
-            "last_message": row["last_msg"] or "",
+            "last_message": decrypt_message(row["last_msg"] or ""),
             "last_message_time": row["last_ts"].isoformat() if row["last_ts"] else None,
             "unread_count": 0,
             "is_subgroup": True,
@@ -462,9 +497,10 @@ async def edit_message(
     if not msg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
 
+    encrypted_text = encrypt_message(new_text)
     await pool.execute(
         "UPDATE messages SET message = $1 WHERE id = $2",
-        new_text, message_id,
+        encrypted_text, message_id,
     )
     return {"status": "ok", "message": new_text}
 
@@ -486,10 +522,10 @@ async def delete_message(
     if not msg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or not yours")
 
-    # Soft delete
+    # Soft delete (encrypt the replacement text too)
     await pool.execute(
-        "UPDATE messages SET is_deleted = true, deleted_by = $1, message = 'This message was deleted' WHERE id = $2",
-        user_id, message_id
+        "UPDATE messages SET is_deleted = true, deleted_by = $1, message = $2 WHERE id = $3",
+        user_id, encrypt_message("This message was deleted"), message_id
     )
     return {"detail": "Message deleted", "deleted_by": current_user["name"]}
 
@@ -570,33 +606,46 @@ async def websocket_chat(websocket: WebSocket, token: str):
                 # Determine initial status
                 initial_status = 'delivered' if manager.is_online(receiver_id) else 'sent'
 
-                # Save to DB
+                # Encrypt before storing
+                encrypted_msg = encrypt_message(message_text)
+                encrypted_img = encrypt_message(image_url) if image_url else ""
+
+                # Save to DB (encrypted)
                 row = await pool.fetchrow(
                     """INSERT INTO messages (sender_id, receiver_id, message, image_url, message_type, status)
                        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
                     user_id,
                     receiver_id,
-                    message_text,
-                    image_url,
+                    encrypted_msg,
+                    encrypted_img,
                     ws_message_type,
                     initial_status,
                 )
 
-                msg_status = row.get("status") or initial_status
+                # Archive
+                await _archive_message(
+                    pool, original_id=row["id"], source_table="messages",
+                    sender_id=user_id, receiver_id=receiver_id,
+                    encrypted_message=encrypted_msg, encrypted_image_url=encrypted_img,
+                    message_type=ws_message_type, original_timestamp=row["timestamp"],
+                )
 
+                msg_status = dict(row).get("status") or initial_status
+
+                # Send DECRYPTED plaintext to clients
                 msg_response = {
                     "type": "message",
                     "id": str(row["id"]),
                     "sender_id": user_id,
                     "receiver_id": receiver_id,
-                    "message": row["message"],
+                    "message": message_text,
                     "timestamp": row["timestamp"].isoformat(),
                     "is_read": False,
                     "status": msg_status,
                     "sender_name": user["name"],
-                    "sender_image": user.get("profile_image_url") or "",
-                    "image_url": row["image_url"] or "",
-                    "message_type": row["message_type"] or "text",
+                    "sender_image": dict(user).get("profile_image_url") or "",
+                    "image_url": image_url or "",
+                    "message_type": ws_message_type or "text",
                 }
 
                 # Send to receiver if online
@@ -715,15 +764,25 @@ async def websocket_chat(websocket: WebSocket, token: str):
                     call_kind = "video" if is_video else "voice"
                     # message format: "{duration}:{kind}:{status}"
                     call_message = f"{duration}:{call_kind}:{status}"
+                    encrypted_call = encrypt_message(call_message)
 
                     row = await pool.fetchrow(
                         """INSERT INTO messages
                            (sender_id, receiver_id, message, message_type, image_url, status, is_read)
                            VALUES ($1, $2, $3, 'call', '', 'read', TRUE)
                            RETURNING *""",
-                        user_id, receiver_id, call_message,
+                        user_id, receiver_id, encrypted_call,
                     )
 
+                    # Archive
+                    await _archive_message(
+                        pool, original_id=row["id"], source_table="messages",
+                        sender_id=user_id, receiver_id=receiver_id,
+                        encrypted_message=encrypted_call,
+                        message_type="call", original_timestamp=row["timestamp"],
+                    )
+
+                    # Send decrypted to clients
                     msg_data = {
                         "type": "message",
                         "id": str(row["id"]),

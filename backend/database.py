@@ -637,6 +637,34 @@ async def init_db():
             );
         """)
 
+        # ── Message archive (encrypted, never deleted by users) ─────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS message_archive (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                original_message_id UUID NOT NULL,
+                source_table VARCHAR(30) NOT NULL,
+                sender_id UUID,
+                receiver_id UUID,
+                community_id UUID,
+                sub_group_id UUID,
+                encrypted_message TEXT NOT NULL DEFAULT '',
+                encrypted_image_url TEXT DEFAULT '',
+                message_type VARCHAR(20) DEFAULT 'text',
+                original_timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
+                archived_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_archive_source
+            ON message_archive (source_table, original_timestamp DESC);
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_archive_sender
+            ON message_archive (sender_id, original_timestamp DESC);
+        """)
+
 
 async def seed_demo_data():
     """Insert demo users, posts, and events if the DB is empty."""
