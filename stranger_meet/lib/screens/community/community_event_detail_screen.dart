@@ -1804,7 +1804,6 @@ class _VenueMapSection extends StatelessWidget {
               zoomControlsEnabled: false,
               myLocationButtonEnabled: false,
               mapToolbarEnabled: false,
-              liteModeEnabled: true,
               onTap: (_) => _openInMaps(),
             ),
           ),

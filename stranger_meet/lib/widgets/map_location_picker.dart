@@ -93,68 +93,113 @@ class _MapLocationPickerState extends State<MapLocationPicker> {
     setState(() => _searchLoading = true);
     try {
       final dio = Dio();
+      // Try Places Autocomplete first
       final res = await dio.get(
         'https://maps.googleapis.com/maps/api/place/autocomplete/json',
         queryParameters: {
           'input': input,
           'key': _kMapsApiKey,
-          'components': 'country:in', // bias to India — remove if global
           'language': 'en',
         },
       );
+      final status = res.data['status'] as String? ?? '';
       final predictions = res.data['predictions'] as List<dynamic>? ?? [];
+
+      if (status == 'OK' && predictions.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _suggestions = predictions.map((p) => _PlaceSuggestion(
+              placeId: p['place_id'] ?? '',
+              description: p['description'] ?? '',
+              mainText: p['structured_formatting']?['main_text'] ?? p['description'] ?? '',
+              secondaryText: p['structured_formatting']?['secondary_text'] ?? '',
+            )).toList();
+            _showSuggestions = true;
+          });
+        }
+        return;
+      }
+
+      // Fallback: Geocoding API search (works without Places API enabled)
+      final geo = await dio.get(
+        'https://maps.googleapis.com/maps/api/geocode/json',
+        queryParameters: {
+          'address': input,
+          'key': _kMapsApiKey,
+          'language': 'en',
+        },
+      );
+      final results = geo.data['results'] as List<dynamic>? ?? [];
       if (mounted) {
         setState(() {
-          _suggestions = predictions.map((p) => _PlaceSuggestion(
-            placeId: p['place_id'] ?? '',
-            description: p['description'] ?? '',
-            mainText: p['structured_formatting']?['main_text'] ?? p['description'] ?? '',
-            secondaryText: p['structured_formatting']?['secondary_text'] ?? '',
-          )).toList();
+          _suggestions = results.take(5).map((r) {
+            final addr = r['formatted_address'] as String? ?? '';
+            final parts = addr.split(',');
+            return _PlaceSuggestion(
+              placeId: '',
+              description: addr,
+              mainText: parts.isNotEmpty ? parts[0].trim() : addr,
+              secondaryText: parts.length > 1 ? parts.sublist(1).join(',').trim() : '',
+              latLng: r['geometry']?['location'] != null
+                  ? LatLng(r['geometry']['location']['lat'], r['geometry']['location']['lng'])
+                  : null,
+            );
+          }).toList();
           _showSuggestions = _suggestions.isNotEmpty;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _suggestions = []);
+      if (mounted) setState(() { _suggestions = []; _showSuggestions = false; });
     } finally {
       if (mounted) setState(() => _searchLoading = false);
     }
   }
 
   Future<void> _selectSuggestion(_PlaceSuggestion suggestion) async {
-    // Dismiss keyboard and suggestions
     _searchFocus.unfocus();
     _searchCtrl.text = suggestion.mainText;
     setState(() { _showSuggestions = false; _loadingAddress = true; });
 
     try {
-      final dio = Dio();
-      final res = await dio.get(
-        'https://maps.googleapis.com/maps/api/place/details/json',
-        queryParameters: {
-          'place_id': suggestion.placeId,
-          'fields': 'geometry,formatted_address',
-          'key': _kMapsApiKey,
-        },
-      );
-      final result = res.data['result'];
-      if (result != null) {
-        final loc = result['geometry']['location'];
-        final latLng = LatLng(loc['lat'], loc['lng']);
-        final address = result['formatted_address'] ?? suggestion.description;
+      LatLng? latLng;
+      String address = suggestion.description;
 
+      if (suggestion.latLng != null) {
+        // Geocoding fallback result — lat/lng already known
+        latLng = suggestion.latLng;
+      } else if (suggestion.placeId.isNotEmpty) {
+        // Places API result — fetch coords via Place Details
+        final dio = Dio();
+        final res = await dio.get(
+          'https://maps.googleapis.com/maps/api/place/details/json',
+          queryParameters: {
+            'place_id': suggestion.placeId,
+            'fields': 'geometry,formatted_address',
+            'key': _kMapsApiKey,
+          },
+        );
+        final result = res.data['result'];
+        if (result != null) {
+          final loc = result['geometry']['location'];
+          latLng = LatLng(loc['lat'], loc['lng']);
+          address = result['formatted_address'] ?? suggestion.description;
+        }
+      }
+
+      if (latLng != null && mounted) {
         setState(() {
           _pickedLatLng = latLng;
           _pickedAddress = address;
+          _searchCtrl.text = address;
           _routePoints = [];
         });
-        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(latLng, 15));
+        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(latLng!, 15));
         if (widget.dropMarker != null) {
-          _fetchRoute(latLng, widget.dropMarker!);
+          _fetchRoute(latLng!, widget.dropMarker!);
         }
       }
     } catch (_) {
-      // fallback — just clear
+      // silently ignore
     } finally {
       if (mounted) setState(() => _loadingAddress = false);
     }
@@ -583,11 +628,13 @@ class _PlaceSuggestion {
   final String description;
   final String mainText;
   final String secondaryText;
+  final LatLng? latLng; // set when result comes from Geocoding API fallback
 
   const _PlaceSuggestion({
     required this.placeId,
     required this.description,
     required this.mainText,
     required this.secondaryText,
+    this.latLng,
   });
 }
