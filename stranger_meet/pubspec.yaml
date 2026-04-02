@@ -27,8 +27,7 @@ dependencies:
   geocoding: ^4.0.0
   video_player: ^2.11.1
   chewie: ^1.13.0
-  firebase_core: ^4.6.0
-  firebase_auth: ^6.3.0
+  google_sign_in: ^6.2.1
   url_launcher: ^6.3.2
   record: ^6.0.0
   just_audio: ^0.9.39

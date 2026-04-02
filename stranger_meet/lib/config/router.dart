@@ -6,6 +6,7 @@ import '../screens/notifications/notifications_screen.dart';
 import '../screens/auth/welcome_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/signup_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
 import '../screens/main_shell.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/explore/explore_screen.dart';
@@ -67,6 +68,10 @@ final router = GoRouter(
     GoRoute(
       path: '/signup',
       builder: (context, state) => const SignupScreen(),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      builder: (context, state) => const ForgotPasswordScreen(),
     ),
 
     // Customer ShellRoute

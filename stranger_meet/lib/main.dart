@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
 
 import 'config/theme.dart';
 import 'config/router.dart';
@@ -9,11 +8,6 @@ import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp();
-  } catch (_) {
-    // Firebase may not be configured for web — continue without it
-  }
   runApp(
     const ProviderScope(
       child: StrangerMeetApp(),

@@ -24,7 +24,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _pageController = PageController();
   int _currentStep = 0;
   static const int _totalSteps = 4;
-  bool _isPhoneVerified = false;
+
+  // Google sign-up state
+  bool _isGoogleSignup = false;
+  String _googleId = '';
+  String _googlePictureUrl = '';
+  bool _isEmailVerified = false;
+  bool _isGoogleLoading = false;
 
   // Step 1 - Basic Info
   final _step1FormKey = GlobalKey<FormState>();
@@ -32,7 +38,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _phoneController = TextEditingController();
   bool _obscurePassword = true;
 
   // Username availability
@@ -42,7 +47,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Timer? _usernameDebounce;
 
   // Step 2 - About You
-  String _occupation = ''; // "student" or "working" or ""
+  String _occupation = '';
   String _designation = '';
   final _customDesignationController = TextEditingController();
   final _collegeController = TextEditingController();
@@ -100,15 +105,30 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _isSigningUp = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Pre-fill if coming from Google sign-in
+    final googleData = ref.read(authStateProvider).pendingGoogleData;
+    if (googleData != null && googleData['is_new_user'] == true) {
+      _nameController.text = googleData['name'] ?? '';
+      _emailController.text = googleData['email'] ?? '';
+      _googleId = googleData['google_id'] ?? '';
+      _googlePictureUrl = googleData['picture'] ?? '';
+      _isGoogleSignup = true;
+      _isEmailVerified = true; // Google already verified the email
+    }
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     _nameController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _phoneController.dispose();
     _collegeController.dispose();
     _companyController.dispose();
+    _customDesignationController.dispose();
     _usernameDebounce?.cancel();
     super.dispose();
   }
@@ -159,18 +179,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       if (!_step1FormKey.currentState!.validate()) return;
       if (_isUsernameAvailable == false) return;
 
-      // Verify phone number via OTP before proceeding
-      final phone = _phoneController.text.trim();
-      if (phone.isNotEmpty && !_isPhoneVerified) {
+      // For regular signup: verify email via OTP before proceeding
+      if (!_isGoogleSignup && !_isEmailVerified) {
+        final email = _emailController.text.trim();
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => OtpVerificationScreen(
-              phoneNumber: phone,
+              email: email,
               onVerified: () {
                 Navigator.pop(context);
-                setState(() => _isPhoneVerified = true);
-                _goToStep(1); // Proceed to step 2
+                setState(() => _isEmailVerified = true);
+                _goToStep(1);
               },
             ),
           ),
@@ -194,6 +214,40 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   void _prevStep() {
     if (_currentStep > 0) {
       _goToStep(_currentStep - 1);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    await ref.read(authStateProvider.notifier).signInWithGoogle();
+    if (!mounted) return;
+    setState(() => _isGoogleLoading = false);
+
+    final state = ref.read(authStateProvider);
+    if (state.status == AuthStatus.authenticated) {
+      // Existing Google user — logged in
+      WebSocketService().connect();
+      if (state.user?.role == 'partner') {
+        context.go('/partner');
+      } else {
+        context.go('/explore');
+      }
+    } else if (state.status == AuthStatus.needsOnboarding) {
+      // New Google user — pre-fill and continue
+      final googleData = state.pendingGoogleData!;
+      setState(() {
+        _nameController.text = googleData['name'] ?? '';
+        _emailController.text = googleData['email'] ?? '';
+        _googleId = googleData['google_id'] ?? '';
+        _googlePictureUrl = googleData['picture'] ?? '';
+        _isGoogleSignup = true;
+        _isEmailVerified = true;
+      });
+    } else if (state.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.errorMessage!)),
+      );
+      ref.read(authStateProvider.notifier).clearError();
     }
   }
 
@@ -243,9 +297,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     await ref.read(authStateProvider.notifier).signup(
           name: _nameController.text.trim(),
           email: _emailController.text.trim(),
-          password: _passwordController.text,
+          password: _isGoogleSignup ? null : _passwordController.text,
           username: _usernameController.text.trim().toLowerCase(),
-          phone: _phoneController.text.trim(),
           interests: _selectedInterests.toList(),
           role: 'customer',
           occupation: _occupation,
@@ -254,14 +307,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           designation: _designation == 'Other'
               ? _customDesignationController.text.trim()
               : _designation,
+          googleId: _googleId,
+          profileImageUrl: _uploadedImageUrl ?? _googlePictureUrl,
         );
 
     if (!mounted) return;
     final state = ref.read(authStateProvider);
 
     if (state.status == AuthStatus.authenticated) {
-      // Upload profile image if selected
-      if (_uploadedImageUrl != null) {
+      if (_uploadedImageUrl != null && _googlePictureUrl.isEmpty) {
         await ref.read(authStateProvider.notifier).updateProfile(
               profileImageUrl: _uploadedImageUrl,
             );
@@ -286,11 +340,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Top bar with back button and step indicator
             _buildTopBar(),
-            // Progress bar
             _buildProgressBar(),
-            // Page content
             Expanded(
               child: PageView(
                 controller: _pageController,
@@ -342,7 +393,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               ),
             ),
           const Spacer(),
-          // Step dots
           Row(
             children: List.generate(_totalSteps, (index) {
               final isActive = index == _currentStep;
@@ -361,7 +411,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             }),
           ),
           const Spacer(),
-          const SizedBox(width: 36), // Balance the back button width
+          const SizedBox(width: 36),
         ],
       ),
     );
@@ -414,9 +464,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             TextFormField(
               controller: _nameController,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
+              readOnly: _isGoogleSignup,
+              decoration: InputDecoration(
                 hintText: 'Full Name',
-                prefixIcon: Icon(Icons.person_outlined),
+                prefixIcon: const Icon(Icons.person_outlined),
+                suffixIcon: _isGoogleSignup
+                    ? const Icon(Icons.lock_outline, size: 18, color: Colors.grey)
+                    : null,
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
@@ -441,13 +495,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         child: SizedBox(
                           width: 20,
                           height: 20,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       )
                     : _isUsernameAvailable == true
-                        ? const Icon(Icons.check_circle,
-                            color: Colors.green)
+                        ? const Icon(Icons.check_circle, color: Colors.green)
                         : _isUsernameAvailable == false
                             ? const Icon(Icons.cancel, color: Colors.red)
                             : null,
@@ -477,9 +529,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
+              readOnly: _isGoogleSignup,
+              decoration: InputDecoration(
                 hintText: 'Email address',
-                prefixIcon: Icon(Icons.email_outlined),
+                prefixIcon: const Icon(Icons.email_outlined),
+                suffixIcon: _isEmailVerified
+                    ? const Icon(Icons.verified, color: Colors.green)
+                    : _isGoogleSignup
+                        ? const Icon(Icons.lock_outline, size: 18, color: Colors.grey)
+                        : null,
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
@@ -491,62 +549,116 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 return null;
               },
             ),
-            const SizedBox(height: 16),
-            // Password
-            TextFormField(
-              controller: _passwordController,
-              obscureText: _obscurePassword,
-              decoration: InputDecoration(
-                hintText: 'Password',
-                prefixIcon: const Icon(Icons.lock_outlined),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscurePassword
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
+            // Password (hidden for Google signup)
+            if (!_isGoogleSignup) ...[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  hintText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_outlined),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
                   ),
-                  onPressed: () {
-                    setState(
-                        () => _obscurePassword = !_obscurePassword);
-                  },
                 ),
+                validator: (value) {
+                  if (_isGoogleSignup) return null;
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a password';
+                  }
+                  if (value.length < 6) {
+                    return 'Password must be at least 6 characters';
+                  }
+                  return null;
+                },
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a password';
-                }
-                if (value.length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            // Phone
-            TextFormField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                hintText: 'Mobile Number',
-                prefixIcon: Icon(Icons.phone_outlined),
-              ),
-            ),
+            ],
             const SizedBox(height: 32),
             // Next button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _nextStep,
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Next'),
-                    SizedBox(width: 8),
-                    Icon(Icons.arrow_forward, size: 18),
+                    Text(_isEmailVerified ? 'Next' : 'Verify Email & Continue'),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward, size: 18),
                   ],
                 ),
               ),
             ),
+            if (!_isGoogleSignup) ...[
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey[700])),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'or',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey[700])),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _isGoogleLoading ? null : _signInWithGoogle,
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.grey[700]!),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _isGoogleLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.primaryColor,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/images/google_logo.png',
+                              height: 20,
+                              width: 20,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.g_mobiledata,
+                                size: 24,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Continue with Google',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -595,7 +707,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             ),
           ),
           const SizedBox(height: 32),
-          // Student option
           _buildOccupationOption(
             title: 'Student',
             subtitle: 'Currently studying',
@@ -603,7 +714,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             value: 'student',
           ),
           const SizedBox(height: 12),
-          // Working option
           _buildOccupationOption(
             title: 'Working Professional',
             subtitle: 'Currently employed',
@@ -611,7 +721,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             value: 'working',
           ),
           const SizedBox(height: 24),
-          // Conditional field
           if (_occupation == 'student') ...[
             TextFormField(
               controller: _collegeController,
@@ -633,7 +742,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            // Role / Designation dropdown
             const Text(
               'Your Role',
               style: TextStyle(
@@ -692,7 +800,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             const SizedBox(height: 24),
           ],
           const SizedBox(height: 16),
-          // Navigation buttons
           Row(
             children: [
               Expanded(
@@ -725,7 +832,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Skip option
           Center(
             child: TextButton(
               onPressed: () {
@@ -776,7 +882,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               decoration: BoxDecoration(
                 color: isSelected
                     ? AppTheme.primaryColor.withOpacity(0.2)
-                    : Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor,
+                    : Theme.of(context).cardTheme.color ??
+                        Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -784,7 +891,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 size: 24,
                 color: isSelected
                     ? Colors.black87
-                    : Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+                    : Theme.of(context).textTheme.bodySmall?.color ??
+                        Colors.grey,
               ),
             ),
             const SizedBox(width: 16),
@@ -799,16 +907,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       fontWeight: FontWeight.w600,
                       color: isSelected
                           ? Colors.black87
-                          : Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+                          : Theme.of(context).textTheme.bodyLarge?.color ??
+                              Colors.black,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[500],
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                   ),
                 ],
               ),
@@ -819,9 +925,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected
-                      ? AppTheme.primaryColor
-                      : AppTheme.dividerColor,
+                  color: isSelected ? AppTheme.primaryColor : AppTheme.dividerColor,
                   width: 2,
                 ),
                 color: isSelected ? AppTheme.primaryColor : Colors.transparent,
@@ -853,7 +957,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Select at least 3 topics you\'re interested in',
+            "Select at least 3 topics you're interested in",
             style: TextStyle(
               fontSize: 15,
               color: Colors.grey[600],
@@ -888,8 +992,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppTheme.primaryColor
@@ -908,7 +1012,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       fontSize: 14,
                       fontWeight:
                           isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected ? Colors.black : Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+                      color: isSelected
+                          ? Colors.black
+                          : Theme.of(context).textTheme.bodyLarge?.color ??
+                              Colors.black,
                     ),
                   ),
                 ),
@@ -916,7 +1023,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             }).toList(),
           ),
           const SizedBox(height: 32),
-          // Navigation buttons
           Row(
             children: [
               Expanded(
@@ -956,6 +1062,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   // ======================= STEP 4: Profile Photo =======================
   Widget _buildStep4ProfilePhoto() {
+    // Determine the preview image: uploaded file > Google picture URL
+    final hasImage = _profileImage != null || _googlePictureUrl.isNotEmpty;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
@@ -984,7 +1093,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             ),
           ),
           const SizedBox(height: 48),
-          // Avatar
           GestureDetector(
             onTap: _isUploadingImage ? null : _pickImage,
             child: Stack(
@@ -997,7 +1105,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     shape: BoxShape.circle,
                     color: Theme.of(context).colorScheme.surface,
                     border: Border.all(
-                      color: _profileImage != null
+                      color: hasImage
                           ? AppTheme.primaryColor
                           : AppTheme.dividerColor,
                       width: 3,
@@ -1007,9 +1115,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             image: FileImage(_profileImage!),
                             fit: BoxFit.cover,
                           )
-                        : null,
+                        : _googlePictureUrl.isNotEmpty
+                            ? DecorationImage(
+                                image: NetworkImage(_googlePictureUrl),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
                   ),
-                  child: _profileImage == null
+                  child: !hasImage
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -1048,7 +1161,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               ],
             ),
           ),
-          if (_profileImage != null && !_isUploadingImage)
+          if (hasImage && !_isUploadingImage)
             Padding(
               padding: const EdgeInsets.only(top: 12),
               child: TextButton.icon(
@@ -1058,7 +1171,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               ),
             ),
           const SizedBox(height: 48),
-          // Navigation buttons
           Row(
             children: [
               Expanded(
@@ -1077,8 +1189,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               const SizedBox(width: 16),
               Expanded(
                 child: ElevatedButton(
-                  onPressed:
-                      _isSigningUp || _isUploadingImage ? null : _signup,
+                  onPressed: _isSigningUp || _isUploadingImage ? null : _signup,
                   child: _isSigningUp
                       ? const SizedBox(
                           height: 20,
@@ -1101,13 +1212,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Skip option
           if (!_isSigningUp)
             TextButton(
               onPressed: () {
                 setState(() {
                   _profileImage = null;
                   _uploadedImageUrl = null;
+                  // Keep Google picture URL as fallback
                 });
                 _signup();
               },

@@ -7,28 +7,35 @@ final authServiceProvider = Provider<AuthService>((ref) {
   return AuthService();
 });
 
-enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
+enum AuthStatus { initial, loading, authenticated, unauthenticated, error, needsOnboarding }
 
 class AuthState {
   final AuthStatus status;
   final User? user;
   final String? errorMessage;
+  final Map<String, dynamic>? pendingGoogleData;
 
   const AuthState({
     this.status = AuthStatus.initial,
     this.user,
     this.errorMessage,
+    this.pendingGoogleData,
   });
 
   AuthState copyWith({
     AuthStatus? status,
     User? user,
     String? errorMessage,
+    Map<String, dynamic>? pendingGoogleData,
+    bool clearPendingGoogleData = false,
   }) {
     return AuthState(
       status: status ?? this.status,
       user: user ?? this.user,
       errorMessage: errorMessage,
+      pendingGoogleData: clearPendingGoogleData
+          ? null
+          : (pendingGoogleData ?? this.pendingGoogleData),
     );
   }
 }
@@ -72,10 +79,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> signInWithGoogle() async {
+    state = state.copyWith(status: AuthStatus.loading);
+    try {
+      final result = await _authService.signInWithGoogle();
+      if (result['is_new_user'] == true) {
+        state = AuthState(
+          status: AuthStatus.needsOnboarding,
+          pendingGoogleData: result,
+        );
+      } else {
+        state = AuthState(
+          status: AuthStatus.authenticated,
+          user: result['user'] as User,
+        );
+      }
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.error,
+        errorMessage: e.toString(),
+      );
+    }
+  }
+
   Future<void> signup({
     required String name,
     required String email,
-    required String password,
+    String? password,
     required String username,
     String phone = '',
     List<String> interests = const [],
@@ -84,6 +114,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String collegeName = '',
     String companyName = '',
     String designation = '',
+    String googleId = '',
+    String profileImageUrl = '',
   }) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
@@ -99,6 +131,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         collegeName: collegeName,
         companyName: companyName,
         designation: designation,
+        googleId: googleId,
+        profileImageUrl: profileImageUrl,
       );
       state = AuthState(
         status: AuthStatus.authenticated,
@@ -108,6 +142,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthState(
         status: AuthStatus.error,
         errorMessage: e.toString(),
+        pendingGoogleData: state.pendingGoogleData,
       );
     }
   }
@@ -145,6 +180,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void clearError() {
     state = state.copyWith(errorMessage: null);
+  }
+
+  void clearPendingGoogleData() {
+    state = state.copyWith(
+      clearPendingGoogleData: true,
+      status: AuthStatus.unauthenticated,
+    );
   }
 }
 
