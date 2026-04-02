@@ -555,6 +555,11 @@ async def init_db():
         await conn.execute("ALTER TABLE communities ADD COLUMN IF NOT EXISTS admin_only_chat BOOLEAN DEFAULT false")
         await conn.execute("ALTER TABLE sub_groups ADD COLUMN IF NOT EXISTS admin_only_chat BOOLEAN DEFAULT false")
 
+        # Google OAuth support
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT DEFAULT ''")
+        # Allow password_hash to be NULL for Google-only accounts
+        await conn.execute("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL")
+
         # Event venue GPS coordinates (for ride sharing drop-off point)
         await conn.execute("ALTER TABLE community_events ADD COLUMN IF NOT EXISTS venue_lat FLOAT DEFAULT 0")
         await conn.execute("ALTER TABLE community_events ADD COLUMN IF NOT EXISTS venue_lng FLOAT DEFAULT 0")

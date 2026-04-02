@@ -6,15 +6,17 @@ from datetime import datetime
 class UserSignup(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: Optional[str] = Field(None, min_length=6)  # None for Google sign-up
     username: str = Field(..., min_length=3, max_length=30, pattern=r'^[a-z0-9_.]+$')
     phone: str = ""
     interests: List[str] = []
     role: str = "customer"
-    occupation: str = ""  # "student" or "working" or ""
+    occupation: str = ""
     college_name: str = ""
     company_name: str = ""
-    designation: str = ""  # job role/title
+    designation: str = ""
+    google_id: str = ""
+    profile_image_url: str = ""
 
 
 class UserLogin(BaseModel):
