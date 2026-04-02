@@ -176,13 +176,6 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     if (_selectedType == 'Trips') eventType = 'trip';
     if (_selectedType == 'Events') eventType = 'event';
 
-    String location = '';
-    if (_selectedLocation == 'Nearby' && _userCity != null) {
-      location = _userCity!;
-    } else if (_selectedLocation != 'All' && _selectedLocation != 'Nearby') {
-      location = _selectedLocation;
-    }
-
     // Count active filters
     int count = 0;
     if (_selectedType != 'All') count++;
@@ -192,9 +185,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     if (_sortBy != 'date') count++;
     setState(() => _activeFilterCount = count);
 
+    // Don't pass location to backend — fetch all events, sort locally
     ref.read(exploreProvider.notifier).fetchEvents(
           eventType: eventType,
-          location: location,
           difficulty: _selectedDifficulty == 'All' ? '' : _selectedDifficulty.toLowerCase(),
         );
   }
@@ -416,13 +409,20 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       return true;
     }).toList();
 
+    // Location priority: selected location events show on top, rest below
+    String? priorityCity;
+    if (_selectedLocation == 'Nearby' && _userCity != null) {
+      priorityCity = _userCity!.toLowerCase();
+    } else if (_selectedLocation != 'All' && _selectedLocation != 'Nearby') {
+      priorityCity = _selectedLocation.toLowerCase();
+    }
+
     // Sort
     if (_sortBy == 'price_low') {
       filteredEvents.sort((a, b) => a.price.compareTo(b.price));
     } else if (_sortBy == 'price_high') {
       filteredEvents.sort((a, b) => b.price.compareTo(a.price));
     } else if (_sortBy == 'nearest' && _userCity != null) {
-      // Put events in user's city first
       final city = _userCity!.toLowerCase();
       filteredEvents.sort((a, b) {
         final aMatch = a.location.toLowerCase().contains(city) ? 0 : 1;
@@ -432,6 +432,15 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     } else {
       // Default: sort by date (soonest first)
       filteredEvents.sort((a, b) => a.date.compareTo(b.date));
+    }
+
+    // After main sort, push location-matched events to top (stable)
+    if (priorityCity != null) {
+      filteredEvents.sort((a, b) {
+        final aMatch = a.location.toLowerCase().contains(priorityCity!) ? 0 : 1;
+        final bMatch = b.location.toLowerCase().contains(priorityCity!) ? 0 : 1;
+        return aMatch.compareTo(bMatch);
+      });
     }
 
     return Scaffold(

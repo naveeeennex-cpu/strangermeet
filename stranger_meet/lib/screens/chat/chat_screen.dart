@@ -60,6 +60,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Message? _replyToMessage;
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
   StreamSubscription<void>? _reconnectSubscription;
+  // Reactions: messageId -> [{emoji, count, user_ids}]
+  final Map<String, List<Map<String, dynamic>>> _reactions = {};
 
   @override
   void initState() {
@@ -134,6 +136,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               .read(messagesProvider(widget.userId).notifier)
               .markSentMessagesAsDelivered(_currentUserId!);
           if (mounted) setState(() {});
+        }
+      } else if (type == 'reaction_update') {
+        final msgId = data['message_id']?.toString();
+        if (msgId != null) {
+          final reactionsData = (data['reactions'] as List?)
+              ?.map((r) => Map<String, dynamic>.from(r))
+              .toList() ?? [];
+          if (mounted) setState(() => _reactions[msgId] = reactionsData);
         }
       } else if (type == 'online') {
         // A user came online — check if it's the conversation partner
@@ -282,6 +292,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ),
             ),
+            if (_reactions.containsKey(message.id) && _reactions[message.id]!.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(
+                  left: isMe ? 60 : 12,
+                  right: isMe ? 12 : 60,
+                ),
+                child: MessageReactionsRow(
+                  reactions: _reactions[message.id]!,
+                  currentUserId: _currentUserId,
+                  isMe: isMe,
+                  onTapReaction: (emoji) => _toggleReaction(message.id, emoji),
+                ),
+              ),
           ],
         );
       },
@@ -412,6 +435,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _toggleReaction(String messageId, String emoji, {String messageTable = 'messages'}) async {
+    try {
+      final response = await ApiService().post('/messages/react/$messageId', data: {
+        'emoji': emoji,
+        'message_table': messageTable,
+      });
+      final reactions = (response.data['reactions'] as List?)
+          ?.map((r) => Map<String, dynamic>.from(r))
+          .toList() ?? [];
+      if (mounted) setState(() => _reactions[messageId] = reactions);
+    } catch (_) {}
+  }
+
   Future<void> _handleMessageLongPress(Message message) async {
     final isOwn = message.senderId == _currentUserId;
     final isText = message.messageType == 'text';
@@ -424,6 +460,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
 
     if (action == null || !mounted) return;
+
+    if (action.startsWith('react:')) {
+      final emoji = action.substring(6);
+      if (emoji == 'more') {
+        // Show emoji picker or let user type
+        _showEmojiPicker(message.id);
+      } else {
+        _toggleReaction(message.id, emoji);
+      }
+      return;
+    }
 
     switch (action) {
       case 'reply':
@@ -456,6 +503,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       case 'copy':
         break; // Already handled in the sheet
     }
+  }
+
+  void _showEmojiPicker(String messageId) {
+    final emojis = ['👍','❤️','😂','😮','😢','🙏','🔥','👏','🎉','💯','😍','🤔','😡','👎','✅'];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: emojis.map((e) => GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _toggleReaction(messageId, e);
+              },
+              child: Text(e, style: const TextStyle(fontSize: 28)),
+            )).toList(),
+          ),
+        ),
+      ),
+    );
   }
 
   void _showEditDialog(Message message) {

@@ -530,6 +530,97 @@ async def delete_message(
     return {"detail": "Message deleted", "deleted_by": current_user["name"]}
 
 
+# ── Message Reactions ─────────────────────────────────────────────────────────
+
+@router.post("/react/{message_id}")
+async def toggle_reaction(
+    message_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Toggle an emoji reaction on any message (DM, community, sub-group)."""
+    pool = request.app.state.pool
+    user_id = current_user["id"]
+    body = await request.json()
+    emoji = (body.get("emoji") or "").strip()
+    message_table = body.get("message_table", "messages")
+
+    if not emoji:
+        raise HTTPException(status_code=400, detail="Emoji is required")
+    if message_table not in ("messages", "community_messages", "sub_group_messages"):
+        raise HTTPException(status_code=400, detail="Invalid message_table")
+
+    # Toggle: remove if exists, add if not
+    existing = await pool.fetchrow(
+        "SELECT id FROM message_reactions WHERE message_id = $1 AND message_table = $2 AND user_id = $3 AND emoji = $4",
+        message_id, message_table, user_id, emoji,
+    )
+
+    if existing:
+        await pool.execute("DELETE FROM message_reactions WHERE id = $1", existing["id"])
+        action = "removed"
+    else:
+        await pool.execute(
+            "INSERT INTO message_reactions (message_id, message_table, user_id, emoji) VALUES ($1, $2, $3, $4)",
+            message_id, message_table, user_id, emoji,
+        )
+        action = "added"
+
+    # Fetch updated reactions for this message
+    reactions = await _get_reactions(pool, message_id, message_table)
+
+    # Broadcast reaction update via WebSocket
+    ws_payload = {
+        "type": "reaction_update",
+        "message_id": message_id,
+        "message_table": message_table,
+        "reactions": reactions,
+        "actor_id": user_id,
+        "actor_name": current_user["name"],
+        "emoji": emoji,
+        "action": action,
+    }
+
+    # Broadcast to relevant users
+    if message_table == "messages":
+        msg = await pool.fetchrow("SELECT sender_id, receiver_id FROM messages WHERE id = $1", message_id)
+        if msg:
+            await manager.send_to_user(str(msg["sender_id"]), ws_payload)
+            await manager.send_to_user(str(msg["receiver_id"]), ws_payload)
+    else:
+        # For group messages, broadcast to all online users (simpler approach)
+        for uid in list(manager.active_connections.keys()):
+            await manager.send_to_user(uid, ws_payload)
+
+    return {"action": action, "reactions": reactions}
+
+
+@router.get("/reactions/{message_id}")
+async def get_reactions(
+    message_id: str,
+    request: Request,
+    message_table: str = Query("messages"),
+    current_user: dict = Depends(get_current_user),
+):
+    pool = request.app.state.pool
+    return await _get_reactions(pool, message_id, message_table)
+
+
+async def _get_reactions(pool, message_id: str, message_table: str):
+    """Get grouped reactions for a message: [{emoji, count, user_ids}]."""
+    rows = await pool.fetch(
+        """SELECT emoji, array_agg(user_id::text) AS user_ids, COUNT(*) AS count
+           FROM message_reactions
+           WHERE message_id = $1 AND message_table = $2
+           GROUP BY emoji ORDER BY MIN(created_at)""",
+        message_id, message_table,
+    )
+    return [
+        {"emoji": r["emoji"], "count": r["count"], "user_ids": list(r["user_ids"])}
+        for r in rows
+    ]
+
+
 @router.websocket("/ws/{token}")
 async def websocket_chat(websocket: WebSocket, token: str):
     from services.auth import decode_access_token

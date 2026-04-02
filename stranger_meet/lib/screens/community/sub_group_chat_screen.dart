@@ -166,6 +166,9 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
   bool _hasText = false;
   String _groupName = 'Group Chat';
 
+  // Reactions: messageId -> [{emoji, count, user_ids}]
+  final Map<String, List<Map<String, dynamic>>> _reactions = {};
+
   // Group call state
   bool _groupCallActive = false;
   String? _groupCallAdminId;
@@ -218,6 +221,14 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
         if (!currentMessages.any((m) => m.id == msg.id)) {
           notifier.addMessageFromWebSocket(msg);
           _scrollToBottom();
+        }
+      } else if (data['type'] == 'reaction_update') {
+        final msgId = data['message_id']?.toString();
+        if (msgId != null) {
+          final reactionsData = (data['reactions'] as List?)
+              ?.map((r) => Map<String, dynamic>.from(r))
+              .toList() ?? [];
+          if (mounted) setState(() => _reactions[msgId] = reactionsData);
         }
       }
 
@@ -838,92 +849,74 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
     );
   }
 
+  Future<void> _toggleReaction(String messageId, String emoji) async {
+    try {
+      final response = await ApiService().post('/messages/react/$messageId', data: {
+        'emoji': emoji,
+        'message_table': 'sub_group_messages',
+      });
+      final reactions = (response.data['reactions'] as List?)
+          ?.map((r) => Map<String, dynamic>.from(r))
+          .toList() ?? [];
+      if (mounted) setState(() => _reactions[messageId] = reactions);
+    } catch (_) {}
+  }
+
+  void _showEmojiPicker(String messageId) {
+    final emojis = ['👍','❤️','😂','😮','😢','🙏','🔥','👏','🎉','💯','😍','🤔','😡','👎','✅'];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: emojis.map((e) => GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _toggleReaction(messageId, e);
+              },
+              child: Text(e, style: const TextStyle(fontSize: 28)),
+            )).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleMessageLongPress(CommunityMessage message) async {
     if (message.isDeleted) return; // No actions on deleted messages
 
     final isOwn = message.userId == _currentUserId;
     final isText = message.messageType == 'text';
 
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: 12, bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[600],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              // Reply
-              ListTile(
-                leading: const Icon(Icons.reply, color: Colors.white70),
-                title: const Text('Reply', style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(ctx, 'reply'),
-              ),
-              // Copy text (for text messages)
-              if (isText)
-                ListTile(
-                  leading: const Icon(Icons.copy_outlined, color: Colors.white70),
-                  title: const Text('Copy text', style: TextStyle(color: Colors.white)),
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: message.message));
-                    Navigator.pop(ctx, 'copy');
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)),
-                    );
-                  },
-                ),
-              // Pin/Unpin (admin only)
-              if (_isAdmin)
-                ListTile(
-                  leading: Icon(
-                    message.isPinned ? Icons.push_pin_outlined : Icons.push_pin,
-                    color: AppTheme.primaryColor,
-                  ),
-                  title: Text(
-                    message.isPinned ? 'Unpin message' : 'Pin message',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  onTap: () => Navigator.pop(ctx, 'pin'),
-                ),
-              // Edit (own text messages only)
-              if (isOwn && isText)
-                ListTile(
-                  leading: const Icon(Icons.edit_outlined, color: Colors.white70),
-                  title: const Text('Edit message', style: TextStyle(color: Colors.white)),
-                  onTap: () => Navigator.pop(ctx, 'edit'),
-                ),
-              // Delete for me
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.white70),
-                title: const Text('Delete for me', style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(ctx, 'delete_for_me'),
-              ),
-              // Delete for everyone (admin or own message)
-              if (isOwn || _isAdmin)
-                ListTile(
-                  leading: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
-                  title: const Text('Delete for everyone', style: TextStyle(color: Colors.redAccent)),
-                  onTap: () => Navigator.pop(ctx, 'delete_for_everyone'),
-                ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
+    final action = await MessageActionsSheet.show(
+      context,
+      isOwnMessage: isOwn,
+      isTextMessage: isText,
+      messageText: message.message,
+      showPin: true,
+      isPinned: message.isPinned,
+      isAdmin: _isAdmin,
     );
 
     if (action == null || !mounted) return;
+
+    if (action.startsWith('react:')) {
+      final emoji = action.substring(6);
+      if (emoji == 'more') {
+        _showEmojiPicker(message.id);
+      } else {
+        _toggleReaction(message.id, emoji);
+      }
+      return;
+    }
 
     switch (action) {
       case 'reply':
@@ -934,6 +927,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
         _showEditDialog(message);
         break;
       case 'pin':
+      case 'unpin':
         await _togglePinMessage(message);
         break;
       case 'delete_for_me':
@@ -946,7 +940,6 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
           await ApiService().delete(
             '/communities/${widget.communityId}/groups/${widget.groupId}/messages/${message.id}',
           );
-          // Update to show as deleted instead of removing
           final messages = ref.read(subGroupMessagesProvider(_providerKey)).messages;
           final updated = messages.map((m) {
             if (m.id == message.id) {
@@ -1861,9 +1854,23 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                                         padding: const EdgeInsets.only(left: 20),
                                         child: Icon(Icons.reply, color: AppTheme.primaryColor),
                                       ),
-                                      child: GestureDetector(
-                                        onLongPress: () => _handleMessageLongPress(message),
-                                        child: messageBubbleWidget,
+                                      child: Column(
+                                        crossAxisAlignment: isMe
+                                            ? CrossAxisAlignment.end
+                                            : CrossAxisAlignment.start,
+                                        children: [
+                                          GestureDetector(
+                                            onLongPress: () => _handleMessageLongPress(message),
+                                            child: messageBubbleWidget,
+                                          ),
+                                          if (_reactions.containsKey(message.id) && _reactions[message.id]!.isNotEmpty)
+                                            MessageReactionsRow(
+                                              reactions: _reactions[message.id]!,
+                                              currentUserId: _currentUserId,
+                                              isMe: isMe,
+                                              onTapReaction: (emoji) => _toggleReaction(message.id, emoji),
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ],

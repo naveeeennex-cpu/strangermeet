@@ -638,8 +638,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           children: [
                             Image.asset(
                               'assets/images/google_logo.png',
-                              height: 20,
-                              width: 20,
+                              height: 28,
+                              width: 28,
                               errorBuilder: (_, __, ___) => const Icon(
                                 Icons.g_mobiledata,
                                 size: 24,

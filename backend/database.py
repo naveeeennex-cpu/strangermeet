@@ -665,6 +665,24 @@ async def init_db():
             ON message_archive (sender_id, original_timestamp DESC);
         """)
 
+        # ── Message reactions (emoji reactions on any message) ──────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS message_reactions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                message_id UUID NOT NULL,
+                message_table VARCHAR(30) NOT NULL DEFAULT 'messages',
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                emoji VARCHAR(10) NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(message_id, message_table, user_id, emoji)
+            );
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_reactions_message
+            ON message_reactions (message_id, message_table);
+        """)
+
 
 async def seed_demo_data():
     """Insert demo users, posts, and events if the DB is empty."""

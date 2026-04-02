@@ -52,6 +52,9 @@ class _CommunityChatScreenState extends ConsumerState<CommunityChatScreen> {
   CommunityMessage? _replyingTo;
   bool _hasText = false;
 
+  // Reactions: messageId -> [{emoji, count, user_ids}]
+  final Map<String, List<Map<String, dynamic>>> _reactions = {};
+
   @override
   void initState() {
     super.initState();
@@ -83,6 +86,14 @@ class _CommunityChatScreenState extends ConsumerState<CommunityChatScreen> {
         if (!currentMessages.any((m) => m.id == msg.id)) {
           ref.read(communityMessagesProvider(widget.communityId).notifier).addMessageFromWebSocket(msg);
           _scrollToBottom();
+        }
+      } else if (data['type'] == 'reaction_update') {
+        final msgId = data['message_id']?.toString();
+        if (msgId != null) {
+          final reactionsData = (data['reactions'] as List?)
+              ?.map((r) => Map<String, dynamic>.from(r))
+              .toList() ?? [];
+          if (mounted) setState(() => _reactions[msgId] = reactionsData);
         }
       }
     });
@@ -393,9 +404,49 @@ class _CommunityChatScreenState extends ConsumerState<CommunityChatScreen> {
     }
   }
 
+  Future<void> _toggleReaction(String messageId, String emoji) async {
+    try {
+      final response = await ApiService().post('/messages/react/$messageId', data: {
+        'emoji': emoji,
+        'message_table': 'community_messages',
+      });
+      final reactions = (response.data['reactions'] as List?)
+          ?.map((r) => Map<String, dynamic>.from(r))
+          .toList() ?? [];
+      if (mounted) setState(() => _reactions[messageId] = reactions);
+    } catch (_) {}
+  }
+
+  void _showEmojiPicker(String messageId) {
+    final emojis = ['👍','❤️','😂','😮','😢','🙏','🔥','👏','🎉','💯','😍','🤔','😡','👎','✅'];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: emojis.map((e) => GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _toggleReaction(messageId, e);
+              },
+              child: Text(e, style: const TextStyle(fontSize: 28)),
+            )).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleMessageLongPress(CommunityMessage message) async {
     final isOwn = message.userId == _currentUserId;
-    // Community chat screen only has text messages (no image support)
     final isText = true;
 
     final action = await MessageActionsSheet.show(
@@ -406,6 +457,16 @@ class _CommunityChatScreenState extends ConsumerState<CommunityChatScreen> {
     );
 
     if (action == null || !mounted) return;
+
+    if (action.startsWith('react:')) {
+      final emoji = action.substring(6);
+      if (emoji == 'more') {
+        _showEmojiPicker(message.id);
+      } else {
+        _toggleReaction(message.id, emoji);
+      }
+      return;
+    }
 
     switch (action) {
       case 'reply':
@@ -585,63 +646,77 @@ class _CommunityChatScreenState extends ConsumerState<CommunityChatScreen> {
                                         padding: const EdgeInsets.only(left: 20),
                                         child: Icon(Icons.reply, color: AppTheme.primaryColor),
                                       ),
-                                      child: GestureDetector(
-                                        onLongPress: () => _handleMessageLongPress(message),
-                                        child: message.messageType == 'voice' &&
-                                                message.imageUrl.isNotEmpty
-                                            ? Column(
-                                                crossAxisAlignment: isMe
-                                                    ? CrossAxisAlignment.end
-                                                    : CrossAxisAlignment.start,
-                                                children: [
-                                                  if (!isMe)
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                              left: 4,
-                                                              bottom: 2),
-                                                      child: Text(
-                                                        message.userName,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: Colors
-                                                              .tealAccent[400],
+                                      child: Column(
+                                        crossAxisAlignment: isMe
+                                            ? CrossAxisAlignment.end
+                                            : CrossAxisAlignment.start,
+                                        children: [
+                                          GestureDetector(
+                                            onLongPress: () => _handleMessageLongPress(message),
+                                            child: message.messageType == 'voice' &&
+                                                    message.imageUrl.isNotEmpty
+                                                ? Column(
+                                                    crossAxisAlignment: isMe
+                                                        ? CrossAxisAlignment.end
+                                                        : CrossAxisAlignment.start,
+                                                    children: [
+                                                      if (!isMe)
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets.only(
+                                                                  left: 4,
+                                                                  bottom: 2),
+                                                          child: Text(
+                                                            message.userName,
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight.w700,
+                                                              color: Colors
+                                                                  .tealAccent[400],
+                                                            ),
+                                                          ),
                                                         ),
+                                                      VoiceMessageBubble(
+                                                        audioUrl: message.imageUrl,
+                                                        durationSeconds:
+                                                            int.tryParse(message
+                                                                    .message) ??
+                                                                0,
+                                                        isMe: isMe,
+                                                        time: message.timestamp !=
+                                                                null
+                                                            ? DateFormat('hh:mm a')
+                                                                .format(message
+                                                                    .timestamp!)
+                                                            : '',
                                                       ),
-                                                    ),
-                                                  VoiceMessageBubble(
-                                                    audioUrl: message.imageUrl,
-                                                    durationSeconds:
-                                                        int.tryParse(message
-                                                                .message) ??
-                                                            0,
+                                                    ],
+                                                  )
+                                                : _GroupMessageBubble(
+                                                    senderName: message.userName,
+                                                    message: message.message,
                                                     isMe: isMe,
-                                                    time: message.timestamp !=
-                                                            null
+                                                    time: message.timestamp != null
                                                         ? DateFormat('hh:mm a')
-                                                            .format(message
-                                                                .timestamp!)
+                                                            .format(
+                                                                message.timestamp!)
                                                         : '',
+                                                    replyWidget: isReplyMessage
+                                                        ? _buildReplyQuote(message)
+                                                        : null,
+                                                    buildMessageText:
+                                                        _buildMessageText,
                                                   ),
-                                                ],
-                                              )
-                                            : _GroupMessageBubble(
-                                                senderName: message.userName,
-                                                message: message.message,
-                                                isMe: isMe,
-                                                time: message.timestamp != null
-                                                    ? DateFormat('hh:mm a')
-                                                        .format(
-                                                            message.timestamp!)
-                                                    : '',
-                                                replyWidget: isReplyMessage
-                                                    ? _buildReplyQuote(message)
-                                                    : null,
-                                                buildMessageText:
-                                                    _buildMessageText,
-                                              ),
+                                          ),
+                                          if (_reactions.containsKey(message.id) && _reactions[message.id]!.isNotEmpty)
+                                            MessageReactionsRow(
+                                              reactions: _reactions[message.id]!,
+                                              currentUserId: _currentUserId,
+                                              isMe: isMe,
+                                              onTapReaction: (emoji) => _toggleReaction(message.id, emoji),
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ],
