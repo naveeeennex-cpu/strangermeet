@@ -573,6 +573,9 @@ async def init_db():
         await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS total_distance_km FLOAT DEFAULT 0")
         await conn.execute("ALTER TABLE event_rides ADD COLUMN IF NOT EXISTS route_polyline TEXT DEFAULT ''")
 
+        # Community posts in unified posts table
+        await conn.execute("ALTER TABLE posts ADD COLUMN IF NOT EXISTS community_id UUID REFERENCES communities(id) ON DELETE CASCADE")
+
         # Ride passengers: midpoint pickup + calculated fare
         await conn.execute("ALTER TABLE event_ride_passengers ADD COLUMN IF NOT EXISTS pickup_lat FLOAT DEFAULT 0")
         await conn.execute("ALTER TABLE event_ride_passengers ADD COLUMN IF NOT EXISTS pickup_lng FLOAT DEFAULT 0")
