@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "993079757615",
-    "project_id": "strangermeet-cf51a",
-    "storage_bucket": "strangermeet-cf51a.firebasestorage.app"
+    "project_number": "594414222454",
+    "project_id": "exstranger-a6fc3",
+    "storage_bucket": "exstranger-a6fc3.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:993079757615:android:cb6299f332dc45d9cfafda",
+        "mobilesdk_app_id": "1:594414222454:android:9d293c828bc46803e5b357",
         "android_client_info": {
-          "package_name": "com.example.stranger_meet"
+          "package_name": "com.company.eXtsranger"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDheY0cIEweXTt0Jbbzbw4pxat2p2dPv2E"
+          "current_key": "AIzaSyAbCI7QVLWNrAwqCuJETNDqBeGl9mFaXv4"
         }
       ],
       "services": {
