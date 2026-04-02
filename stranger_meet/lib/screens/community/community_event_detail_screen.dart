@@ -2206,10 +2206,7 @@ class _BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (event.isJoined) {
-      return SafeArea(
-        top: false,
-        child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      return Container(
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
           boxShadow: [
@@ -2220,98 +2217,96 @@ class _BottomBar extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Enrolled badge
-            Container(
-              width: double.infinity,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    "You're Enrolled!",
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            // Action buttons row
-            Row(
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // View Members
-                Expanded(
-                  child: SizedBox(
-                    height: 46,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        _showMembersSheet(context);
-                      },
-                      icon: const Icon(Icons.people_outline, size: 18),
-                      label: Text(
-                        'Members (${participants.length})',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.grey.shade600),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                // Enrolled badge
+                Container(
+                  width: double.infinity,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        "You're Enrolled!",
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                // Contact Admin
-                Expanded(
-                  child: SizedBox(
-                    height: 46,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        _contactAdmin(context);
-                      },
-                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                      label: const Text(
-                        'Contact Admin',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 10),
+                // Action buttons row
+                Row(
+                  children: [
+                    // View Members
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showMembersSheet(context),
+                          icon: const Icon(Icons.people_outline, size: 18),
+                          label: Text(
+                            'Members (${participants.length})',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.black87,
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
-                        elevation: 0,
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    // Contact Admin
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _contactAdmin(context),
+                          icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                          label: const Text(
+                            'Contact Admin',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
-      ),
       );
     }
 
-    return SafeArea(
-      top: false,
-      child: Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+    return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         boxShadow: [
@@ -2322,70 +2317,76 @@ class _BottomBar extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          // Price column
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          child: Row(
             children: [
-              Text(
-                event.price > 0
-                    ? '\u20B9${event.price.toStringAsFixed(0)}'
-                    : 'FREE',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
+              // Price column
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    event.price > 0
+                        ? '\u20B9${event.price.toStringAsFixed(0)}'
+                        : 'FREE',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    'per person',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  ),
+                ],
               ),
-              Text(
-                'per person',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              const SizedBox(width: 20),
+              // Enroll button
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: (isFull || isPast || isJoining) ? null : onJoin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey[300],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: isJoining
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            isPast
+                                ? 'Event Ended'
+                                : isFull
+                                    ? 'Fully Booked'
+                                    : event.isTrip
+                                        ? 'Book a tour'
+                                        : 'Enroll Now',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(width: 20),
-          // Enroll button
-          Expanded(
-            child: SizedBox(
-              height: 52,
-              child: ElevatedButton(
-                onPressed: (isFull || isPast || isJoining) ? null : onJoin,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey[300],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 0,
-                ),
-                child: isJoining
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        isPast
-                            ? 'Event Ended'
-                            : isFull
-                                ? 'Fully Booked'
-                                : event.isTrip
-                                    ? 'Book a tour'
-                                    : 'Enroll Now',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     ),
     );
