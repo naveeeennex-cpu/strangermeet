@@ -109,16 +109,22 @@ def _build_otp_html(to_email: str, code: str, heading: str, subtext: str) -> str
 
 
 def _dispatch_email(to_email: str, subject: str, html: str):
+    print(f"[SMTP] Sending to {to_email} | subject: {subject}")
     msg = MIMEMultipart("alternative")
     msg["From"] = f"StrangerMeet <{SMTP_EMAIL}>"
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.attach(MIMEText(html, "html"))
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
-        server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+        print(f"[SMTP] Sent successfully to {to_email}")
+    except Exception as exc:
+        print(f"[SMTP ERROR] {type(exc).__name__}: {exc}")
+        raise
 
 
 async def _send_email_otp_mail(to_email: str, code: str):
@@ -131,7 +137,7 @@ async def _send_email_otp_mail(to_email: str, code: str):
             "Enter the code below in the app to continue."
         ),
     )
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await loop.run_in_executor(
         None, _dispatch_email, to_email,
         f"{code} — StrangerMeet verification code", html,
@@ -148,7 +154,7 @@ async def _send_reset_otp_mail(to_email: str, code: str):
             "Enter the code below to proceed. If you did not make this request, no action is required."
         ),
     )
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await loop.run_in_executor(
         None, _dispatch_email, to_email,
         f"{code} — StrangerMeet password reset", html,
