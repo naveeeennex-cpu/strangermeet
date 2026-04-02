@@ -280,29 +280,36 @@ class _CommunityEventDetailScreenState
           tabs: tabs.map((t) => Tab(text: t)).toList(),
         ),
       ),
-      body: TabBarView(
-        controller: tabController,
-        children: isTrip
-            ? [
-                _TourScheduleTab(
-                  event: event,
-                  communityId: widget.communityId,
-                  eventId: widget.eventId,
-                ),
-                _AccommodationTab(
-                  communityId: widget.communityId,
-                  eventId: widget.eventId,
-                ),
-                _BookingDetailsTab(event: event),
-              ]
-            : [
-                _OverviewTab(event: event),
-                _MembersTab(
-                  event: event,
-                  participants: _participants,
-                  isLoadingParticipants: _isLoadingParticipants,
-                ),
-              ],
+      body: Column(
+        children: [
+          _MeetingTimeBanner(event: event),
+          Expanded(
+            child: TabBarView(
+              controller: tabController,
+              children: isTrip
+                  ? [
+                      _TourScheduleTab(
+                        event: event,
+                        communityId: widget.communityId,
+                        eventId: widget.eventId,
+                      ),
+                      _AccommodationTab(
+                        communityId: widget.communityId,
+                        eventId: widget.eventId,
+                      ),
+                      _BookingDetailsTab(event: event),
+                    ]
+                  : [
+                      _OverviewTab(event: event),
+                      _MembersTab(
+                        event: event,
+                        participants: _participants,
+                        isLoadingParticipants: _isLoadingParticipants,
+                      ),
+                    ],
+            ),
+          ),
+        ],
       ),
 
       // Ride sharing FAB — only visible to enrolled users
@@ -336,6 +343,138 @@ class _CommunityEventDetailScreenState
         onJoin: _joinEvent,
         participants: _participants,
         communityId: widget.communityId,
+      ),
+    );
+  }
+}
+
+// ── Meeting Time Banner ───────────────────────────────────────────
+
+class _MeetingTimeBanner extends StatelessWidget {
+  final CommunityEvent event;
+
+  const _MeetingTimeBanner({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final eventDay = DateTime(event.date.year, event.date.month, event.date.day);
+    final diff = eventDay.difference(today).inDays;
+
+    String dayLabel;
+    Color labelColor;
+    IconData labelIcon;
+
+    if (diff == 0) {
+      dayLabel = 'Today';
+      labelColor = Colors.orange;
+      labelIcon = Icons.today;
+    } else if (diff == 1) {
+      dayLabel = 'Tomorrow';
+      labelColor = AppTheme.primaryColor;
+      labelIcon = Icons.event;
+    } else if (diff > 1) {
+      dayLabel = 'in $diff days';
+      labelColor = AppTheme.primaryColor;
+      labelIcon = Icons.event_available;
+    } else {
+      dayLabel = 'Ended';
+      labelColor = Colors.grey;
+      labelIcon = Icons.event_busy;
+    }
+
+    final timeStr = DateFormat('h:mm a').format(event.date);
+    final dateStr = DateFormat('EEE, MMM d').format(event.date);
+
+    // For trips with an end date, also show end
+    final endStr = (event.isTrip && event.endDate != null)
+        ? ' — ${DateFormat('MMM d').format(event.endDate!)}'
+        : '';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor.withOpacity(0.5),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Time pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Theme.of(context).dividerColor.withOpacity(0.6),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.access_time_rounded, size: 14, color: Colors.grey[400]),
+                const SizedBox(width: 5),
+                Text(
+                  timeStr,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Date
+          Expanded(
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today_outlined, size: 13, color: Colors.grey[500]),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    '$dateStr$endStr',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[400],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Countdown chip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: labelColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(labelIcon, size: 13, color: labelColor),
+                const SizedBox(width: 4),
+                Text(
+                  dayLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: labelColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2067,8 +2206,10 @@ class _BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (event.isJoined) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      return SafeArea(
+        top: false,
+        child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
           boxShadow: [
@@ -2125,8 +2266,8 @@ class _BottomBar extends StatelessWidget {
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black87,
-                        side: BorderSide(color: Colors.grey.shade300),
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.grey.shade600),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -2163,11 +2304,14 @@ class _BottomBar extends StatelessWidget {
             ),
           ],
         ),
+      ),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+    return SafeArea(
+      top: false,
+      child: Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         boxShadow: [
@@ -2243,6 +2387,7 @@ class _BottomBar extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 

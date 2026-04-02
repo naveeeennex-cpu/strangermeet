@@ -15,93 +15,107 @@ class NotificationsScreen extends ConsumerStatefulWidget {
       _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   final ApiService _api = ApiService();
 
   List<Map<String, dynamic>> _friendRequests = [];
-  List<Map<String, dynamic>> _chatNotifications = [];
-  bool _isLoadingRequests = true;
-  bool _isLoadingChats = true;
+  List<Map<String, dynamic>> _notifications = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _fetchFriendRequests();
-    _fetchChatNotifications();
+    _loadAll();
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+  Future<void> _loadAll() async {
+    setState(() => _isLoading = true);
+    await Future.wait([
+      _fetchFriendRequests(),
+      _fetchNotifications(),
+    ]);
+    if (mounted) setState(() => _isLoading = false);
   }
 
   Future<void> _fetchFriendRequests() async {
     try {
-      final response = await _api.get('/friends/requests');
-      final data = response.data;
-      final List<dynamic> results = data is List ? data : [];
-      setState(() {
-        _friendRequests = results.cast<Map<String, dynamic>>();
-        _isLoadingRequests = false;
-      });
-    } catch (e) {
-      setState(() => _isLoadingRequests = false);
-    }
+      final res = await _api.get('/friends/requests');
+      final data = res.data;
+      final list = data is List ? data : [];
+      if (mounted) {
+        setState(() {
+          _friendRequests = list.cast<Map<String, dynamic>>();
+        });
+      }
+    } catch (_) {}
   }
 
-  Future<void> _fetchChatNotifications() async {
+  Future<void> _fetchNotifications() async {
     try {
-      final response = await _api.get('/messages');
-      final data = response.data;
-      final List<dynamic> results = data is List ? data : [];
-      // Filter to show only unread or recent messages
-      setState(() {
-        _chatNotifications = results.cast<Map<String, dynamic>>();
-        _isLoadingChats = false;
-      });
-    } catch (e) {
-      setState(() => _isLoadingChats = false);
-    }
+      final res = await _api.get('/notifications');
+      final data = res.data;
+      final list = data is List ? data : [];
+      if (mounted) {
+        setState(() {
+          _notifications = list.cast<Map<String, dynamic>>();
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _acceptRequest(String requestId, int index) async {
     try {
       await _api.post('/friends/accept/$requestId');
-      setState(() {
-        _friendRequests.removeAt(index);
-      });
+      setState(() => _friendRequests.removeAt(index));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Friend request accepted!'),
+            content: Text('Friend request accepted'),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
       }
     }
   }
 
-  Future<void> _rejectRequest(String requestId, int index) async {
+  Future<void> _declineRequest(String requestId, int index) async {
     try {
       await _api.post('/friends/reject/$requestId');
-      setState(() {
-        _friendRequests.removeAt(index);
-      });
+      setState(() => _friendRequests.removeAt(index));
     } catch (_) {}
   }
 
+  Future<void> _markRead(String notifId, int index) async {
+    if (_notifications[index]['is_read'] == true) return;
+    setState(() => _notifications[index]['is_read'] = true);
+    try {
+      await _api.post('/notifications/$notifId/read');
+    } catch (_) {}
+  }
+
+  Future<void> _markAllRead() async {
+    setState(() {
+      for (final n in _notifications) {
+        n['is_read'] = true;
+      }
+    });
+    try {
+      await _api.post('/notifications/read-all');
+    } catch (_) {}
+  }
+
+  int get _unreadCount =>
+      _notifications.where((n) => n['is_read'] != true).length;
+
   @override
   Widget build(BuildContext context) {
+    final hasContent = _friendRequests.isNotEmpty || _notifications.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -112,341 +126,406 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
           'Notifications',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppTheme.primaryColor,
-          indicatorWeight: 3,
-          labelColor: Theme.of(context).textTheme.bodyLarge?.color,
-          unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color,
-          tabs: [
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.person_add, size: 18),
-                  const SizedBox(width: 6),
-                  const Text('Requests'),
-                  if (_friendRequests.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${_friendRequests.length}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+        actions: [
+          if (_unreadCount > 0)
+            TextButton(
+              onPressed: _markAllRead,
+              child: const Text(
+                'Mark all read',
+                style: TextStyle(
+                  color: AppTheme.primaryColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
             ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.chat_bubble_outline, size: 18),
-                  const SizedBox(width: 6),
-                  const Text('Messages'),
-                  if (_chatNotifications.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${_chatNotifications.length}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : !hasContent
+              ? _buildEmpty()
+              : RefreshIndicator(
+                  onRefresh: _loadAll,
+                  child: ListView(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    children: [
+                      // ── Friend Requests ──
+                      if (_friendRequests.isNotEmpty) ...[
+                        _SectionHeader(
+                          label: 'Friend Requests',
+                          count: _friendRequests.length,
+                        ),
+                        ..._friendRequests.asMap().entries.map(
+                              (e) => _FriendRequestCard(
+                                req: e.value,
+                                onAccept: () =>
+                                    _acceptRequest(e.value['id']?.toString() ?? '', e.key),
+                                onDecline: () =>
+                                    _declineRequest(e.value['id']?.toString() ?? '', e.key),
+                              ),
+                            ),
+                      ],
+
+                      // ── Activity Notifications ──
+                      if (_notifications.isNotEmpty) ...[
+                        _SectionHeader(
+                          label: 'Activity',
+                          count: _unreadCount > 0 ? _unreadCount : null,
+                        ),
+                        ..._notifications.asMap().entries.map(
+                              (e) => _NotificationCard(
+                                notif: e.value,
+                                onTap: () {
+                                  _markRead(e.value['id']?.toString() ?? '', e.key);
+                                  _handleNotifTap(e.value);
+                                },
+                              ),
+                            ),
+                      ],
+                    ],
+                  ),
+                ),
+    );
+  }
+
+  void _handleNotifTap(Map<String, dynamic> notif) {
+    final type = notif['type']?.toString() ?? '';
+    final data = notif['data'] as Map<String, dynamic>? ?? {};
+    if (type == 'event_update') {
+      final communityId = data['community_id']?.toString();
+      final eventId = data['event_id']?.toString();
+      if (communityId != null && eventId != null) {
+        context.push('/community/$communityId/event/$eventId');
+      }
+    }
+  }
+
+  Widget _buildEmpty() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildRequestsTab(),
-          _buildChatsTab(),
+          Icon(Icons.notifications_none_outlined,
+              size: 64, color: Colors.grey[600]),
+          const SizedBox(height: 16),
+          const Text(
+            'All caught up',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'No notifications right now.',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildRequestsTab() {
-    if (_isLoadingRequests) {
-      return const Center(child: CircularProgressIndicator());
-    }
+// ── Section Header ────────────────────────────────────────────────
 
-    if (_friendRequests.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.person_add_outlined, size: 56, color: Colors.grey[300]),
-            const SizedBox(height: 16),
-            Text(
-              'No friend requests',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[500],
-              ),
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  final int? count;
+
+  const _SectionHeader({required this.label, this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'When someone sends you a request, it will appear here',
-              style: TextStyle(fontSize: 13, color: Colors.grey[400]),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _friendRequests.length,
-      itemBuilder: (context, index) {
-        final req = _friendRequests[index];
-        final name = req['requester_name'] ?? 'Unknown';
-        final image = req['requester_image'];
-        final requestId = req['id']?.toString() ?? '';
-        final requesterId = req['requester_id']?.toString() ?? '';
-        final communities = (req['communities'] as List?)?.cast<String>() ?? [];
-        final createdAt = req['created_at'] != null
-            ? DateTime.tryParse(req['created_at'])
-            : null;
-
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color ?? Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Theme.of(context).dividerColor),
           ),
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: () => context.push('/user/$requesterId'),
-                child: CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Theme.of(context).colorScheme.surface,
-                  backgroundImage: image != null && image.toString().isNotEmpty
-                      ? CachedNetworkImageProvider(image.toString())
-                      : null,
-                  child: image == null || image.toString().isEmpty
-                      ? Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : '?',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                          ),
-                        )
-                      : null,
+          if (count != null && count! > 0) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Friend Request Card ───────────────────────────────────────────
+
+class _FriendRequestCard extends StatelessWidget {
+  final Map<String, dynamic> req;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  const _FriendRequestCard({
+    required this.req,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = req['requester_name'] ?? 'Unknown';
+    final image = req['requester_image']?.toString();
+    final requesterId = req['requester_id']?.toString() ?? '';
+    final communities =
+        (req['communities'] as List?)?.cast<String>() ?? [];
+    final createdAt = req['created_at'] != null
+        ? DateTime.tryParse(req['created_at'])
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => context.push('/user/$requesterId'),
+            child: CircleAvatar(
+              radius: 26,
+              backgroundColor: AppTheme.primaryColor.withOpacity(0.15),
+              backgroundImage: (image != null && image.isNotEmpty)
+                  ? CachedNetworkImageProvider(image)
+                  : null,
+              child: (image == null || image.isEmpty)
+                  ? Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 18),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: () => context.push('/user/$requesterId'),
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  createdAt != null
+                      ? 'Sent ${timeago.format(createdAt)}'
+                      : 'Wants to connect with you',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+                if (communities.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.people_outline,
+                          size: 12, color: AppTheme.primaryColor),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          communities.join(', '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.primaryColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Row(
                   children: [
-                    GestureDetector(
-                      onTap: () => context.push('/user/$requesterId'),
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
+                    Expanded(
+                      child: SizedBox(
+                        height: 34,
+                        child: ElevatedButton(
+                          onPressed: onAccept,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.black,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            'Accept',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
                         ),
                       ),
                     ),
-                    if (communities.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Icon(Icons.people_outline, size: 12, color: AppTheme.primaryColor),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              communities.join(', '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.primaryColor,
-                                fontWeight: FontWeight.w500,
-                              ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SizedBox(
+                        height: 34,
+                        child: OutlinedButton(
+                          onPressed: onDecline,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.grey[400],
+                            side: BorderSide(color: Colors.grey.shade700),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 2),
-                    Text(
-                      createdAt != null
-                          ? 'Sent ${timeago.format(createdAt)}'
-                          : 'Wants to be your friend',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
+                          child: const Text(
+                            'Decline',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ),
-              // Accept button
-              SizedBox(
-                height: 34,
-                child: ElevatedButton(
-                  onPressed: () => _acceptRequest(requestId, index),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Accept',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              // Reject button
-              SizedBox(
-                height: 34,
-                child: OutlinedButton(
-                  onPressed: () => _rejectRequest(requestId, index),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    side: BorderSide(color: Theme.of(context).dividerColor),
-                  ),
-                  child: Icon(Icons.close, size: 18, color: Colors.grey[600]),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildChatsTab() {
-    if (_isLoadingChats) {
-      return const Center(child: CircularProgressIndicator());
+// ── Activity Notification Card ────────────────────────────────────
+
+class _NotificationCard extends StatelessWidget {
+  final Map<String, dynamic> notif;
+  final VoidCallback onTap;
+
+  const _NotificationCard({required this.notif, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final type = notif['type']?.toString() ?? 'general';
+    final title = notif['title']?.toString() ?? '';
+    final body = notif['body']?.toString() ?? '';
+    final isRead = notif['is_read'] == true;
+    final createdAt = notif['created_at'] != null
+        ? DateTime.tryParse(notif['created_at'].toString())
+        : null;
+
+    IconData icon;
+    Color iconColor;
+    switch (type) {
+      case 'event_update':
+        icon = Icons.event_note_outlined;
+        iconColor = AppTheme.primaryColor;
+        break;
+      case 'friend_request':
+        icon = Icons.person_add_outlined;
+        iconColor = Colors.blue;
+        break;
+      default:
+        icon = Icons.notifications_outlined;
+        iconColor = Colors.grey;
     }
 
-    if (_chatNotifications.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isRead
+              ? Theme.of(context).colorScheme.surface
+              : AppTheme.primaryColor.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isRead
+                ? Theme.of(context).dividerColor
+                : AppTheme.primaryColor.withOpacity(0.25),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.chat_bubble_outline, size: 56, color: Colors.grey[300]),
-            const SizedBox(height: 16),
-            Text(
-              'No messages yet',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[500],
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight:
+                          isRead ? FontWeight.w500 : FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    body,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[500],
+                      height: 1.4,
+                    ),
+                  ),
+                  if (createdAt != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      timeago.format(createdAt),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Start chatting with your friends!',
-              style: TextStyle(fontSize: 13, color: Colors.grey[400]),
-            ),
+            if (!isRead)
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(top: 4),
+                decoration: const BoxDecoration(
+                  color: AppTheme.primaryColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
           ],
         ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _chatNotifications.length,
-      itemBuilder: (context, index) {
-        final chat = _chatNotifications[index];
-        final senderName = chat['sender_name'] ?? chat['user_name'] ?? chat['partner_name'] ?? 'Unknown';
-        final message = chat['message'] ?? chat['last_message'] ?? '';
-        final senderId = chat['sender_id']?.toString() ?? chat['user_id']?.toString() ?? '';
-        final receiverId = chat['receiver_id']?.toString() ?? '';
-        final timestamp = chat['timestamp'] != null
-            ? DateTime.tryParse(chat['timestamp'])
-            : null;
-        final isRead = chat['is_read'] ?? true;
-
-        return ListTile(
-          leading: CircleAvatar(
-            radius: 22,
-            backgroundColor:
-                isRead ? Theme.of(context).colorScheme.surface : AppTheme.primaryColor.withOpacity(0.2),
-            child: Text(
-              senderName.isNotEmpty ? senderName[0].toUpperCase() : '?',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: isRead ? Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey : Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
-              ),
-            ),
-          ),
-          title: Text(
-            senderName,
-            style: TextStyle(
-              fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
-              fontSize: 14,
-            ),
-          ),
-          subtitle: Text(
-            message,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              color: isRead ? Colors.grey[500] : Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
-            ),
-          ),
-          trailing: timestamp != null
-              ? Text(
-                  timeago.format(timestamp),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[400],
-                  ),
-                )
-              : null,
-          onTap: () {
-            // Navigate to chat with the other user
-            final chatUserId = senderId;
-            context.push('/chat/$chatUserId?name=${Uri.encodeComponent(senderName)}');
-          },
-        );
-      },
+      ),
     );
   }
 }

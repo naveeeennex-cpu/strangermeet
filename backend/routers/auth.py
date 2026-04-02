@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 # ── Config ──────────────────────────────────────────────────────────────────
 
 SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 587
+SMTP_PORT = 465
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "aptirix@gmail.com")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "nsfp awfz hkis nkop")
 GOOGLE_CLIENT_ID = os.getenv(

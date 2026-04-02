@@ -114,6 +114,13 @@ async def init_db():
             EXCEPTION WHEN duplicate_column THEN NULL;
             END $$;
         """)
+        # FCM push token (updated by Flutter when app starts)
+        await conn.execute("""
+            DO $$ BEGIN
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT DEFAULT '';
+            EXCEPTION WHEN duplicate_column THEN NULL;
+            END $$;
+        """)
 
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS posts (
@@ -575,6 +582,20 @@ async def init_db():
 
         # Community posts in unified posts table
         await conn.execute("ALTER TABLE posts ADD COLUMN IF NOT EXISTS community_id UUID REFERENCES communities(id) ON DELETE CASCADE")
+
+        # In-app notifications
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                type VARCHAR(50) NOT NULL DEFAULT 'general',
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                data JSONB DEFAULT '{}',
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
 
         # Ride passengers: midpoint pickup + calculated fare
         await conn.execute("ALTER TABLE event_ride_passengers ADD COLUMN IF NOT EXISTS pickup_lat FLOAT DEFAULT 0")

@@ -3,6 +3,7 @@ from typing import List
 
 from schemas.friend import FriendRequestCreate, FriendRequestResponse, FriendResponse, FriendshipStatus
 from services.auth import get_current_user
+from services.fcm import send_push
 
 router = APIRouter(prefix="/api/friends", tags=["friends"])
 
@@ -58,7 +59,7 @@ async def send_friend_request(
             detail=f"Failed to send friend request: {str(e)}",
         )
 
-    return FriendRequestResponse(
+    response = FriendRequestResponse(
         id=str(row["id"]),
         requester_id=str(row["requester_id"]),
         addressee_id=str(row["addressee_id"]),
@@ -69,6 +70,27 @@ async def send_friend_request(
         addressee_image=addressee.get("profile_image_url"),
         created_at=row["created_at"],
     )
+
+    # FCM push to addressee
+    try:
+        fcm_row = await pool.fetchrow(
+            "SELECT fcm_token FROM users WHERE id = $1", data.addressee_id
+        )
+        if fcm_row and fcm_row["fcm_token"]:
+            await send_push(
+                token=fcm_row["fcm_token"],
+                title="New Friend Request",
+                body=f"{current_user['name']} sent you a friend request",
+                data={
+                    "type": "friend_request",
+                    "requester_id": str(user_id),
+                    "request_id": str(row["id"]),
+                },
+            )
+    except Exception:
+        pass
+
+    return response
 
 
 @router.post("/accept/{request_id}", response_model=FriendRequestResponse)

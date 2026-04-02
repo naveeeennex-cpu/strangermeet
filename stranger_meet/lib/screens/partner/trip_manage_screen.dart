@@ -166,10 +166,19 @@ class _TripManageScreenState extends ConsumerState<TripManageScreen>
         title: const Text('Manage Trip'),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
-          unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
-          indicatorColor: AppTheme.primaryColor,
-          indicatorWeight: 3,
+          labelColor: Theme.of(context).brightness == Brightness.dark
+              ? Colors.black
+              : Colors.white,
+          unselectedLabelColor: Theme.of(context).textTheme.bodySmall?.color,
+          indicatorSize: TabBarIndicatorSize.tab,
+          indicator: BoxDecoration(
+            color: AppTheme.primaryColor,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          indicatorPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          dividerColor: Colors.transparent,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
           tabs: const [
             Tab(text: 'Itinerary'),
             Tab(text: 'Enrollments'),

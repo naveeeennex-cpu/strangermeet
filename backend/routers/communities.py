@@ -2057,6 +2057,44 @@ async def update_community_event(
 
     creator = await pool.fetchrow("SELECT name FROM users WHERE id = $1", str(row["created_by"]))
 
+    # Notify all enrolled users about the update
+    enrolled = await pool.fetch(
+        "SELECT user_id FROM community_event_bookings WHERE event_id = $1 AND user_id != $2",
+        event_id, user_id,
+    )
+    if enrolled:
+        import json as _json
+        from services.fcm import send_push as _send_push
+        notif_data = _json.dumps({"event_id": event_id, "community_id": community_id})
+        notif_title = f"Schedule updated: {data.title}"
+        notif_body = f"The organiser has updated the details for '{data.title}'. Tap to see the latest schedule."
+        enrolled_user_ids = [e["user_id"] for e in enrolled]
+        # Insert in-app notifications
+        for uid in enrolled_user_ids:
+            await pool.execute(
+                """INSERT INTO notifications (user_id, type, title, body, data)
+                   VALUES ($1, 'event_update', $2, $3, $4::jsonb)""",
+                uid,
+                notif_title,
+                notif_body,
+                notif_data,
+            )
+        # Send FCM push notifications
+        try:
+            fcm_rows = await pool.fetch(
+                "SELECT fcm_token FROM users WHERE id = ANY($1) AND fcm_token != ''",
+                enrolled_user_ids,
+            )
+            for fcm_row in fcm_rows:
+                await _send_push(
+                    token=fcm_row["fcm_token"],
+                    title=notif_title,
+                    body=notif_body,
+                    data={"type": "event_update", "event_id": event_id, "community_id": community_id},
+                )
+        except Exception:
+            pass
+
     return _event_row_to_response(row, creator_name=creator["name"] if creator else None, is_booked=False, participants_count=0)
 
 

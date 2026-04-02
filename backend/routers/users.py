@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from typing import List, Optional
+from pydantic import BaseModel
 
 from schemas.user import UserResponse, UserUpdate
 from schemas.post import PostResponse
@@ -221,6 +222,26 @@ async def get_user_posts(
         )
         for row in rows
     ]
+
+
+class FcmTokenUpdate(BaseModel):
+    token: str
+
+
+@router.post("/fcm-token", status_code=200)
+async def update_fcm_token(
+    body: FcmTokenUpdate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Store/refresh the FCM device token for the current user."""
+    pool = request.app.state.pool
+    await pool.execute(
+        "UPDATE users SET fcm_token = $1 WHERE id = $2",
+        body.token,
+        current_user["id"],
+    )
+    return {"ok": True}
 
 
 @router.get("", response_model=List[UserResponse])

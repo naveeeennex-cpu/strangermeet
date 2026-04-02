@@ -5,6 +5,7 @@ import logging
 
 from schemas.message import MessageCreate, MessageResponse
 from services.auth import get_current_user
+from services.fcm import send_push
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,32 @@ async def send_message(
     await manager.send_to_user(message_data.receiver_id, ws_payload)
     # Send to sender (so other devices / the WS listener can confirm)
     await manager.send_to_user(sender_id, ws_payload)
+
+    # FCM push — only when receiver is NOT connected via WebSocket
+    if not manager.is_online(message_data.receiver_id):
+        try:
+            fcm_row = await pool.fetchrow(
+                "SELECT fcm_token FROM users WHERE id = $1", message_data.receiver_id
+            )
+            if fcm_row and fcm_row["fcm_token"]:
+                if response_data.message_type == "voice":
+                    preview = "🎤 Voice message"
+                elif response_data.message_type == "image":
+                    preview = "📷 Photo"
+                else:
+                    preview = (response_data.message or "New message")[:80]
+                await send_push(
+                    token=fcm_row["fcm_token"],
+                    title=current_user["name"],
+                    body=preview,
+                    data={
+                        "type": "new_message",
+                        "sender_id": sender_id,
+                        "message_id": response_data.id,
+                    },
+                )
+        except Exception as _push_err:
+            logger.warning(f"[FCM] DM push failed: {_push_err}")
 
     return response_data
 
