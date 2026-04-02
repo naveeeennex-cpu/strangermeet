@@ -2671,24 +2671,53 @@ class _GroupMessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (!isMe)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: EdgeInsets.only(
-                      bottom: 2, left: isImage ? 6 : 0, top: isImage ? 2 : 0),
-                  child: Text(
-                    senderName,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: _getSenderColor(senderName),
+            // Sender name + message grouped together (left-aligned internally)
+            if (!isMe && !isImage)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      senderName,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _getSenderColor(senderName),
+                      ),
                     ),
+                  ),
+                  if (replyWidget != null) replyWidget!,
+                  buildMessageText != null
+                      ? buildMessageText!(message, isMe: isMe)
+                      : Text(
+                          message,
+                          style: const TextStyle(fontSize: 15, color: Colors.white),
+                        ),
+                ],
+              )
+            else if (!isMe && isImage) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2, left: 6, top: 2),
+                child: Text(
+                  senderName,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _getSenderColor(senderName),
                   ),
                 ),
               ),
-            // Reply quote
-            if (replyWidget != null) replyWidget!,
+            ] else if (isMe && !isImage) ...[
+              if (replyWidget != null) replyWidget!,
+              buildMessageText != null
+                  ? buildMessageText!(message, isMe: isMe)
+                  : Text(
+                      message,
+                      style: const TextStyle(fontSize: 15, color: Colors.white),
+                    ),
+            ],
             if (isImage)
               GestureDetector(
                 onTap: imageUrl.startsWith('file://')
@@ -2743,13 +2772,6 @@ class _GroupMessageBubble extends StatelessWidget {
                   ],
                 ),
               ),
-            if (!isImage)
-              buildMessageText != null
-                  ? buildMessageText!(message, isMe: isMe)
-                  : Text(
-                      message,
-                      style: const TextStyle(fontSize: 15, color: Colors.white),
-                    ),
             if (isImage && message.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
@@ -2760,14 +2782,20 @@ class _GroupMessageBubble extends StatelessWidget {
                         style: const TextStyle(fontSize: 14, color: Colors.white),
                       ),
               ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  time,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-                ),
-              ],
+            // Time — exactly like DM: Row with mainAxisSize.min, right-aligned by Column
+            Padding(
+              padding: isImage
+                  ? const EdgeInsets.only(right: 6, bottom: 2, top: 2)
+                  : EdgeInsets.zero,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    time,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

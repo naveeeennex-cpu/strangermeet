@@ -827,28 +827,40 @@ class _GroupMessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!isMe)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    senderName,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: _getSenderColor(senderName),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      senderName,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _getSenderColor(senderName),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            // Reply quote (if this is a reply message)
-            if (replyWidget != null) replyWidget!,
-            buildMessageText != null
-                ? buildMessageText!(message, isMe: isMe)
-                : Text(
-                    message,
-                    style: const TextStyle(fontSize: 15, color: Colors.white),
-                  ),
+                  if (replyWidget != null) replyWidget!,
+                  buildMessageText != null
+                      ? buildMessageText!(message, isMe: isMe)
+                      : Text(
+                          message,
+                          style: const TextStyle(fontSize: 15, color: Colors.white),
+                        ),
+                ],
+              )
+            else ...[
+              // Reply quote (if this is a reply message)
+              if (replyWidget != null) replyWidget!,
+              buildMessageText != null
+                  ? buildMessageText!(message, isMe: isMe)
+                  : Text(
+                      message,
+                      style: const TextStyle(fontSize: 15, color: Colors.white),
+                    ),
+            ],
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -305,18 +305,29 @@ async def google_auth(request: Request):
     name = info.get("name", "")
     picture = info.get("picture", "")
 
-    # Check if user exists by google_id or email
+    # Check if user exists by google_id first
     user = await pool.fetchrow(
-        "SELECT * FROM users WHERE google_id = $1 OR (email = $2 AND email != '')",
-        google_id, email,
+        "SELECT * FROM users WHERE google_id = $1", google_id,
     )
+    # Then check by email (case-insensitive) — covers email/password users
+    if not user and email:
+        user = await pool.fetchrow(
+            "SELECT * FROM users WHERE LOWER(email) = LOWER($1)", email,
+        )
 
     if user:
-        # Link google_id to existing email account if not already linked
+        user = dict(user)  # Convert Record to dict for safe .get() access
+        # Link google_id to existing email/password account if not already linked
         if not user.get("google_id"):
             await pool.execute(
                 "UPDATE users SET google_id = $1 WHERE id = $2",
                 google_id, user["id"],
+            )
+        # Update profile picture from Google if user doesn't have one
+        if not user.get("profile_image_url") and picture:
+            await pool.execute(
+                "UPDATE users SET profile_image_url = $1 WHERE id = $2",
+                picture, user["id"],
             )
         access_token = create_access_token(data={"sub": str(user["id"])})
         return {
@@ -346,7 +357,9 @@ async def signup(user_data: UserSignup, request: Request):
     if not user_data.google_id and not user_data.password:
         raise HTTPException(status_code=400, detail="Password is required")
 
-    existing = await pool.fetchrow("SELECT id FROM users WHERE email = $1", user_data.email)
+    existing = await pool.fetchrow(
+        "SELECT id FROM users WHERE LOWER(email) = LOWER($1)", user_data.email,
+    )
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -392,9 +405,13 @@ async def signup(user_data: UserSignup, request: Request):
 async def login(user_data: UserLogin, request: Request):
     pool = request.app.state.pool
 
-    user = await pool.fetchrow("SELECT * FROM users WHERE email = $1", user_data.email)
-    if not user:
+    row = await pool.fetchrow(
+        "SELECT * FROM users WHERE LOWER(email) = LOWER($1)", user_data.email,
+    )
+    if not row:
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    user = dict(row)  # Convert Record to dict for safe .get() access
 
     if not user.get("password_hash"):
         raise HTTPException(

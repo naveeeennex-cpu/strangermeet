@@ -322,16 +322,18 @@ class _BookingCard extends StatelessWidget {
           ? () => context.push('/community/$communityId/event/$eventId')
           : null,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.dividerColor),
+          border: Border.all(
+            color: isDark ? Colors.white.withOpacity(0.12) : theme.dividerColor,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+              color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
