@@ -24,6 +24,8 @@ class PostResponse(BaseModel):
     is_liked: bool = False
     comments_count: int = 0
     created_at: datetime
+    community_id: Optional[str] = None
+    community_name: Optional[str] = None
 
 
 class PostUpdate(BaseModel):

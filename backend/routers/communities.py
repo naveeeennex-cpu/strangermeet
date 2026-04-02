@@ -581,21 +581,22 @@ async def create_community_post(
     await _require_member(pool, community_id, user_id)
 
     try:
+        # Write to unified posts table with community_id set
         row = await pool.fetchrow(
-            """INSERT INTO community_posts (community_id, user_id, image_url, caption)
-               VALUES ($1, $2, $3, $4) RETURNING *""",
-            community_id, user_id, data.image_url, data.caption
+            """INSERT INTO posts (user_id, image_url, caption, media_type, community_id)
+               VALUES ($1, $2, $3, 'image', $4) RETURNING *""",
+            user_id, data.image_url or "", data.caption, community_id
         )
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create post: {str(e)}")
 
     return CommunityPostResponse(
         id=str(row["id"]),
-        community_id=str(row["community_id"]),
+        community_id=community_id,
         user_id=str(row["user_id"]),
         user_name=current_user["name"],
         user_profile_image=current_user.get("profile_image_url"),
-        image_url=row["image_url"],
+        image_url=row["image_url"] or None,
         caption=row["caption"],
         likes_count=0,
         is_liked=False,
@@ -615,13 +616,14 @@ async def list_community_posts(
     pool = request.app.state.pool
     user_id = current_user["id"]
 
+    # Read from unified posts table filtered by community_id
     rows = await pool.fetch(
-        """SELECT cp.*, u.name AS user_name, u.profile_image_url AS user_profile_image,
-                  (SELECT COUNT(*) FROM community_post_comments WHERE post_id = cp.id) AS comments_count
-           FROM community_posts cp
-           JOIN users u ON cp.user_id = u.id
-           WHERE cp.community_id = $1
-           ORDER BY cp.created_at DESC
+        """SELECT p.*, u.name AS user_name, u.profile_image_url AS user_profile_image,
+                  (SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comments_count
+           FROM posts p
+           JOIN users u ON p.user_id = u.id
+           WHERE p.community_id = $1
+           ORDER BY p.created_at DESC
            OFFSET $2 LIMIT $3""",
         community_id, skip, limit
     )
@@ -629,7 +631,7 @@ async def list_community_posts(
     if rows:
         post_ids = [row["id"] for row in rows]
         liked_rows = await pool.fetch(
-            "SELECT post_id FROM community_post_likes WHERE user_id = $1 AND post_id = ANY($2)",
+            "SELECT post_id FROM post_likes WHERE user_id = $1 AND post_id = ANY($2)",
             user_id, post_ids
         )
         liked_ids = {str(r["post_id"]) for r in liked_rows}
@@ -639,11 +641,11 @@ async def list_community_posts(
     return [
         CommunityPostResponse(
             id=str(row["id"]),
-            community_id=str(row["community_id"]),
+            community_id=community_id,
             user_id=str(row["user_id"]),
             user_name=row["user_name"],
             user_profile_image=row.get("user_profile_image"),
-            image_url=row["image_url"],
+            image_url=row["image_url"] or None,
             caption=row["caption"],
             likes_count=row["likes_count"],
             is_liked=str(row["id"]) in liked_ids,

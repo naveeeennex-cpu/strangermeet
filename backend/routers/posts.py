@@ -9,6 +9,7 @@ router = APIRouter(prefix="/api/posts", tags=["posts"])
 
 def _row_to_post_response(row, liked_post_ids: set = None) -> PostResponse:
     post_id = str(row["id"])
+    community_id = row.get("community_id")
     return PostResponse(
         id=post_id,
         user_id=str(row["user_id"]),
@@ -23,6 +24,8 @@ def _row_to_post_response(row, liked_post_ids: set = None) -> PostResponse:
         is_liked=post_id in (liked_post_ids or set()),
         comments_count=row.get("comments_count", 0),
         created_at=row["created_at"],
+        community_id=str(community_id) if community_id else None,
+        community_name=row.get("community_name") or None,
     )
 
 
@@ -75,25 +78,45 @@ async def get_feed(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    community_id: str = Query(None),
     current_user: dict = Depends(get_current_user),
 ):
     pool = request.app.state.pool
     user_id = current_user["id"]
 
-    rows = await pool.fetch(
-        """
-        SELECT p.*,
-               u.name AS user_name,
-               u.profile_image_url AS user_profile_image,
-               (SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comments_count
-        FROM posts p
-        JOIN users u ON p.user_id = u.id
-        ORDER BY p.created_at DESC
-        OFFSET $1 LIMIT $2
-        """,
-        skip,
-        limit,
-    )
+    if community_id:
+        rows = await pool.fetch(
+            """
+            SELECT p.*,
+                   u.name AS user_name,
+                   u.profile_image_url AS user_profile_image,
+                   c.name AS community_name,
+                   (SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comments_count
+            FROM posts p
+            JOIN users u ON p.user_id = u.id
+            LEFT JOIN communities c ON p.community_id = c.id
+            WHERE p.community_id = $1
+            ORDER BY p.created_at DESC
+            OFFSET $2 LIMIT $3
+            """,
+            community_id, skip, limit,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT p.*,
+                   u.name AS user_name,
+                   u.profile_image_url AS user_profile_image,
+                   c.name AS community_name,
+                   (SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comments_count
+            FROM posts p
+            JOIN users u ON p.user_id = u.id
+            LEFT JOIN communities c ON p.community_id = c.id
+            ORDER BY p.created_at DESC
+            OFFSET $1 LIMIT $2
+            """,
+            skip, limit,
+        )
 
     # Get set of post IDs the current user has liked
     if rows:

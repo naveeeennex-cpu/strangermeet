@@ -13,6 +13,8 @@ class Post {
   final bool isLiked;
   final int commentsCount;
   final DateTime? createdAt;
+  final String? communityId;
+  final String? communityName;
 
   Post({
     required this.id,
@@ -27,6 +29,8 @@ class Post {
     this.isLiked = false,
     this.commentsCount = 0,
     this.createdAt,
+    this.communityId,
+    this.communityName,
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
@@ -43,6 +47,8 @@ class Post {
       isLiked: json['is_liked'] ?? json['isLiked'] ?? false,
       commentsCount: json['comments_count'] ?? json['commentsCount'] ?? 0,
       createdAt: parseUtcToLocal(json['created_at']) ?? parseUtcToLocal(json['createdAt']),
+      communityId: json['community_id']?.toString(),
+      communityName: json['community_name']?.toString(),
     );
   }
 
@@ -76,6 +82,8 @@ class Post {
     bool? isLiked,
     int? commentsCount,
     DateTime? createdAt,
+    String? communityId,
+    String? communityName,
   }) {
     return Post(
       id: id ?? this.id,
@@ -90,6 +98,8 @@ class Post {
       isLiked: isLiked ?? this.isLiked,
       commentsCount: commentsCount ?? this.commentsCount,
       createdAt: createdAt ?? this.createdAt,
+      communityId: communityId ?? this.communityId,
+      communityName: communityName ?? this.communityName,
     );
   }
 }
