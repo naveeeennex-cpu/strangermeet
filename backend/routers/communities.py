@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from typing import List, Optional
-from routers.chat import manager as ws_manager
+from routers.chat import manager as ws_manager, active_group_calls
 
 import math
 import httpx
@@ -2623,3 +2623,28 @@ async def delete_event_ride(
 
     await pool.execute("DELETE FROM event_rides WHERE id = $1", ride_id)
     return {"detail": "Ride deleted successfully"}
+
+
+# ── Group Call Status ─────────────────────────────────────────────────────
+
+@router.get("/{community_id}/groups/{group_id}/active-call")
+async def get_active_group_call(
+    community_id: str,
+    group_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Check if a group call is active in this sub-group."""
+    call = active_group_calls.get(group_id)
+    if call:
+        return {
+            "active": True,
+            "admin_id": call["admin_id"],
+            "admin_name": call["admin_name"],
+            "admin_image": call.get("admin_image", ""),
+            "participants": call["participants"],
+            "participant_names": call.get("participant_names", {}),
+            "participant_images": call.get("participant_images", {}),
+            "is_video": call["is_video"],
+            "started_at": call["started_at"],
+        }
+    return {"active": False}

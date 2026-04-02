@@ -169,6 +169,75 @@ class WebSocketService {
     }));
   }
 
+  // ── Group Call Signaling ──────────────────────────────────────────────
+
+  void sendGroupCallStart(String subGroupId, String communityId, {bool isVideo = false}) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'group_call_start',
+      'sub_group_id': subGroupId,
+      'community_id': communityId,
+      'is_video': isVideo,
+    }));
+  }
+
+  void sendGroupCallJoin(String subGroupId) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'group_call_join',
+      'sub_group_id': subGroupId,
+    }));
+  }
+
+  void sendGroupCallLeave(String subGroupId) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'group_call_leave',
+      'sub_group_id': subGroupId,
+    }));
+  }
+
+  void sendGroupCallEnd(String subGroupId) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'group_call_end',
+      'sub_group_id': subGroupId,
+    }));
+  }
+
+  void sendGroupCallOffer(String targetId, String subGroupId, String sdp, {bool isVideo = false}) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'group_call_offer',
+      'target_id': targetId,
+      'sub_group_id': subGroupId,
+      'sdp': sdp,
+      'is_video': isVideo,
+    }));
+  }
+
+  void sendGroupCallAnswer(String targetId, String subGroupId, String sdp) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'group_call_answer',
+      'target_id': targetId,
+      'sub_group_id': subGroupId,
+      'sdp': sdp,
+    }));
+  }
+
+  void sendGroupCallIce(String targetId, String subGroupId, String candidate, String sdpMid, int sdpMLineIndex) {
+    if (!_isConnected || _channel == null) return;
+    _channel!.sink.add(jsonEncode({
+      'type': 'group_call_ice',
+      'target_id': targetId,
+      'sub_group_id': subGroupId,
+      'candidate': candidate,
+      'sdp_mid': sdpMid,
+      'sdp_m_line_index': sdpMLineIndex,
+    }));
+  }
+
   void disconnect() {
     _reconnectTimer?.cancel();
     _channel?.sink.close();

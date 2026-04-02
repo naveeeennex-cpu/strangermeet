@@ -38,6 +38,7 @@ class _CommunityManageScreenState
   List<User> _filteredMembers = [];
   bool _isMembersLoading = false;
   String? _communityImageUrl;
+  bool _isImageUploading = false;
 
   List<Map<String, dynamic>> _adminEvents = [];
   bool _isAdminEventsLoading = false;
@@ -136,6 +137,48 @@ class _CommunityManageScreenState
     }
   }
 
+  Future<void> _pickAndUploadCommunityImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 85,
+    );
+    if (pickedFile == null) return;
+
+    setState(() => _isImageUploading = true);
+    try {
+      final bytes = await pickedFile.readAsBytes();
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(bytes, filename: pickedFile.name),
+        'folder': 'communities',
+      });
+      final res = await ApiService().uploadFile('/upload', formData: formData);
+      final url = res.data['url'] as String;
+      setState(() => _communityImageUrl = url);
+
+      // Save immediately
+      await ref
+          .read(adminCommunitiesProvider.notifier)
+          .editCommunity(widget.communityId, {'image_url': url});
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Community image updated')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isImageUploading = false);
+    }
+  }
+
   Future<void> _saveDetails() async {
     setState(() => _isEditLoading = true);
     try {
@@ -145,6 +188,7 @@ class _CommunityManageScreenState
         'name': _nameController.text.trim(),
         'description': _descriptionController.text.trim(),
         'is_private': _isPrivate,
+        if (_communityImageUrl != null) 'image_url': _communityImageUrl,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -929,44 +973,65 @@ class _CommunityManageScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Community image preview
-          if (_communityImageUrl != null && _communityImageUrl!.isNotEmpty)
-            Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: CachedNetworkImage(
-                  imageUrl: _communityImageUrl!,
-                  width: double.infinity,
-                  height: 180,
-                  fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => Container(
-                    height: 180,
-                    color: Theme.of(context).dividerColor,
-                    child: Icon(Icons.image, size: 48, color: Theme.of(context).textTheme.bodySmall?.color),
+          // Community image preview (tap to change)
+          GestureDetector(
+            onTap: _isImageUploading ? null : _pickAndUploadCommunityImage,
+            child: Stack(
+              children: [
+                if (_communityImageUrl != null && _communityImageUrl!.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: CachedNetworkImage(
+                      imageUrl: _communityImageUrl!,
+                      width: double.infinity,
+                      height: 180,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        height: 180,
+                        color: Theme.of(context).dividerColor,
+                        child: Icon(Icons.image, size: 48, color: Theme.of(context).textTheme.bodySmall?.color),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_photo_alternate_outlined, size: 40, color: AppTheme.primaryColor),
+                        const SizedBox(height: 8),
+                        Text('Tap to add image', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                // Camera overlay icon
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: _isImageUploading
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                          )
+                        : const Icon(Icons.camera_alt, size: 16, color: Colors.black),
                   ),
                 ),
-              ),
-            )
-          else
-            Center(
-              child: Container(
-                width: double.infinity,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Theme.of(context).dividerColor),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.image_outlined, size: 40, color: Theme.of(context).textTheme.bodySmall?.color),
-                    const SizedBox(height: 8),
-                    Text('No image set', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 13)),
-                  ],
-                ),
-              ),
+              ],
             ),
+          ),
           const SizedBox(height: 24),
           Text(
             'Community Name',
@@ -1042,6 +1107,23 @@ class _CommunityManageScreenState
                       ),
                     )
                   : const Text('Save Changes'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => context.push('/create-post?communityId=${widget.communityId}'),
+              icon: const Icon(Icons.post_add),
+              label: const Text('Create Community Post'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primaryColor,
+                side: BorderSide(color: AppTheme.primaryColor),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             ),
           ),
         ],

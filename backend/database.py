@@ -459,6 +459,10 @@ async def init_db():
         await conn.execute("""
             UPDATE messages SET status = 'read' WHERE is_read = TRUE AND (status IS NULL OR status = 'sent');
         """)
+        # Fix: mark all call messages as read (they should never count as unread)
+        await conn.execute("""
+            UPDATE messages SET is_read = TRUE, status = 'read' WHERE message_type = 'call' AND is_read = FALSE;
+        """)
 
         # Add image_url and message_type columns to community_messages table
         await conn.execute("""

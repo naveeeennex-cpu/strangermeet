@@ -63,6 +63,7 @@ async def upload_and_create_post(
     request: Request,
     caption: str = Form(""),
     media_type: str = Form("image"),
+    community_id: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     video: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
@@ -106,8 +107,8 @@ async def upload_and_create_post(
     # Create post in DB
     row = await pool.fetchrow(
         """
-        INSERT INTO posts (user_id, image_url, caption, media_type, video_url)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO posts (user_id, image_url, caption, media_type, video_url, community_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
         """,
         user_id,
@@ -115,6 +116,7 @@ async def upload_and_create_post(
         caption,
         media_type,
         video_url,
+        community_id,
     )
 
     return {

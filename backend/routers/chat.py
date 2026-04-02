@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, WebSocket, WebSocketDisconnect
 from typing import List
+from datetime import datetime
 import json
 import logging
 
@@ -64,6 +65,9 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+# Active group calls: sub_group_id -> call metadata
+active_group_calls: dict[str, dict] = {}
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 
@@ -230,7 +234,7 @@ async def get_unread_count(
     current_id = current_user["id"]
 
     count = await pool.fetchval(
-        "SELECT COUNT(*) FROM messages WHERE receiver_id = $1 AND is_read = FALSE",
+        "SELECT COUNT(*) FROM messages WHERE receiver_id = $1 AND is_read = FALSE AND message_type != 'call'",
         current_id,
     )
     return {"count": count or 0}
@@ -347,7 +351,7 @@ async def get_conversations(
         """
         SELECT sender_id, COUNT(*) AS unread
         FROM messages
-        WHERE receiver_id = $1 AND is_read = FALSE
+        WHERE receiver_id = $1 AND is_read = FALSE AND message_type != 'call'
         GROUP BY sender_id
         """,
         current_id,
@@ -749,7 +753,177 @@ async def websocket_chat(websocket: WebSocket, token: str):
                         },
                     )
 
+            # ── Group Call Signaling ─────────────────────────────────────
+
+            elif msg_type == "group_call_start":
+                sub_group_id = data.get("sub_group_id")
+                community_id = data.get("community_id")
+                is_video = data.get("is_video", False)
+
+                if sub_group_id and sub_group_id not in active_group_calls:
+                    # Verify admin
+                    cm = await pool.fetchrow(
+                        "SELECT role FROM community_members WHERE community_id = $1 AND user_id = $2",
+                        community_id, user_id,
+                    )
+                    if not cm or cm["role"] != "admin":
+                        await websocket.send_json({"type": "error", "message": "Only admins can start group calls"})
+                        continue
+
+                    user_row = await pool.fetchrow("SELECT name, profile_image_url FROM users WHERE id = $1", user_id)
+                    admin_name = user_row["name"] if user_row else "Admin"
+                    admin_image = (user_row["profile_image_url"] if user_row else "") or ""
+
+                    active_group_calls[sub_group_id] = {
+                        "admin_id": str(user_id),
+                        "admin_name": admin_name,
+                        "admin_image": admin_image,
+                        "sub_group_id": sub_group_id,
+                        "community_id": community_id,
+                        "participants": [str(user_id)],
+                        "participant_names": {str(user_id): admin_name},
+                        "participant_images": {str(user_id): admin_image},
+                        "is_video": is_video,
+                        "started_at": datetime.utcnow().isoformat(),
+                    }
+
+                    member_rows = await pool.fetch(
+                        "SELECT user_id::text FROM sub_group_members WHERE sub_group_id = $1",
+                        sub_group_id,
+                    )
+                    member_ids = [r["user_id"] for r in member_rows]
+                    await manager.broadcast_to_group(member_ids, {
+                        "type": "group_call_started",
+                        "sub_group_id": sub_group_id,
+                        "admin_id": str(user_id),
+                        "admin_name": admin_name,
+                        "is_video": is_video,
+                        "participants": [str(user_id)],
+                    })
+
+            elif msg_type == "group_call_join":
+                sub_group_id = data.get("sub_group_id")
+                call = active_group_calls.get(sub_group_id)
+                if call and str(user_id) not in call["participants"]:
+                    user_row = await pool.fetchrow("SELECT name, profile_image_url FROM users WHERE id = $1", user_id)
+                    uname = user_row["name"] if user_row else "User"
+                    uimage = (user_row["profile_image_url"] if user_row else "") or ""
+
+                    call["participants"].append(str(user_id))
+                    call["participant_names"][str(user_id)] = uname
+                    call["participant_images"][str(user_id)] = uimage
+
+                    member_rows = await pool.fetch(
+                        "SELECT user_id::text FROM sub_group_members WHERE sub_group_id = $1",
+                        sub_group_id,
+                    )
+                    member_ids = [r["user_id"] for r in member_rows]
+                    await manager.broadcast_to_group(member_ids, {
+                        "type": "group_call_participant_joined",
+                        "sub_group_id": sub_group_id,
+                        "user_id": str(user_id),
+                        "user_name": uname,
+                        "user_image": uimage,
+                        "participants": call["participants"],
+                    })
+
+            elif msg_type == "group_call_leave":
+                sub_group_id = data.get("sub_group_id")
+                call = active_group_calls.get(sub_group_id)
+                if call and str(user_id) in call["participants"]:
+                    call["participants"].remove(str(user_id))
+                    call["participant_names"].pop(str(user_id), None)
+                    call["participant_images"].pop(str(user_id), None)
+
+                    member_rows = await pool.fetch(
+                        "SELECT user_id::text FROM sub_group_members WHERE sub_group_id = $1",
+                        sub_group_id,
+                    )
+                    member_ids = [r["user_id"] for r in member_rows]
+                    await manager.broadcast_to_group(member_ids, {
+                        "type": "group_call_participant_left",
+                        "sub_group_id": sub_group_id,
+                        "user_id": str(user_id),
+                        "participants": call["participants"],
+                    })
+
+            elif msg_type == "group_call_end":
+                sub_group_id = data.get("sub_group_id")
+                call = active_group_calls.get(sub_group_id)
+                if call and str(call["admin_id"]) == str(user_id):
+                    del active_group_calls[sub_group_id]
+                    member_rows = await pool.fetch(
+                        "SELECT user_id::text FROM sub_group_members WHERE sub_group_id = $1",
+                        sub_group_id,
+                    )
+                    member_ids = [r["user_id"] for r in member_rows]
+                    await manager.broadcast_to_group(member_ids, {
+                        "type": "group_call_ended",
+                        "sub_group_id": sub_group_id,
+                        "ended_by": str(user_id),
+                    })
+
+            # Group call WebRTC signaling (offer/answer/ICE between pairs)
+            elif msg_type == "group_call_offer":
+                target_id = data.get("target_id")
+                if target_id:
+                    await manager.send_to_user(target_id, {
+                        "type": "group_call_offer",
+                        "sender_id": str(user_id),
+                        "sub_group_id": data.get("sub_group_id"),
+                        "sdp": data.get("sdp"),
+                        "is_video": data.get("is_video", False),
+                    })
+
+            elif msg_type == "group_call_answer":
+                target_id = data.get("target_id")
+                if target_id:
+                    await manager.send_to_user(target_id, {
+                        "type": "group_call_answer",
+                        "sender_id": str(user_id),
+                        "sub_group_id": data.get("sub_group_id"),
+                        "sdp": data.get("sdp"),
+                    })
+
+            elif msg_type == "group_call_ice":
+                target_id = data.get("target_id")
+                if target_id:
+                    await manager.send_to_user(target_id, {
+                        "type": "group_call_ice",
+                        "sender_id": str(user_id),
+                        "sub_group_id": data.get("sub_group_id"),
+                        "candidate": data.get("candidate"),
+                        "sdp_mid": data.get("sdp_mid"),
+                        "sdp_m_line_index": data.get("sdp_m_line_index"),
+                    })
+
     except WebSocketDisconnect:
+        # If admin disconnects, end their group call
+        for sg_id, call in list(active_group_calls.items()):
+            if str(call["admin_id"]) == str(user_id):
+                del active_group_calls[sg_id]
+                try:
+                    member_rows = await pool.fetch(
+                        "SELECT user_id::text FROM sub_group_members WHERE sub_group_id = $1",
+                        sg_id,
+                    )
+                    member_ids = [r["user_id"] for r in member_rows]
+                    await manager.broadcast_to_group(member_ids, {
+                        "type": "group_call_ended",
+                        "sub_group_id": sg_id,
+                        "ended_by": str(user_id),
+                    })
+                except Exception:
+                    pass
+            elif str(user_id) in call.get("participants", []):
+                call["participants"].remove(str(user_id))
+                call["participant_names"].pop(str(user_id), None)
+                call["participant_images"].pop(str(user_id), None)
         await manager.disconnect(user_id)
     except Exception:
+        for sg_id, call in list(active_group_calls.items()):
+            if str(call["admin_id"]) == str(user_id):
+                del active_group_calls[sg_id]
+            elif str(user_id) in call.get("participants", []):
+                call["participants"].remove(str(user_id))
         await manager.disconnect(user_id)

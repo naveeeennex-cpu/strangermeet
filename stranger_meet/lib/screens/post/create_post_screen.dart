@@ -11,7 +11,9 @@ import '../../providers/post_provider.dart';
 import '../../services/api_service.dart';
 
 class CreatePostScreen extends ConsumerStatefulWidget {
-  const CreatePostScreen({super.key});
+  final String? communityId;
+
+  const CreatePostScreen({super.key, this.communityId});
 
   @override
   ConsumerState<CreatePostScreen> createState() => _CreatePostScreenState();
@@ -109,6 +111,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen>
         final formData = FormData.fromMap({
           'caption': caption,
           'media_type': 'video',
+          if (widget.communityId != null) 'community_id': widget.communityId,
           'video': MultipartFile.fromBytes(
             _videoBytes!,
             filename: _selectedVideo!.name,
@@ -120,6 +123,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen>
         final formData = FormData.fromMap({
           'caption': caption,
           'media_type': 'image',
+          if (widget.communityId != null) 'community_id': widget.communityId,
           'image': MultipartFile.fromBytes(
             _imageBytes!,
             filename: _selectedImage!.name,
@@ -131,6 +135,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen>
         await ApiService().post('/posts', data: {
           'caption': caption,
           'media_type': 'text',
+          if (widget.communityId != null) 'community_id': widget.communityId,
         });
       }
 

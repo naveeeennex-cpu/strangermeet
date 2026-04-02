@@ -219,7 +219,10 @@ final router = GoRouter(
     GoRoute(
       path: '/create-post',
       parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => const CreatePostScreen(),
+      builder: (context, state) {
+        final communityId = state.uri.queryParameters['communityId'];
+        return CreatePostScreen(communityId: communityId);
+      },
     ),
     GoRoute(
       path: '/create-sub-group/:communityId',

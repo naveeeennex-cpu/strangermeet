@@ -21,6 +21,7 @@ import '../../widgets/chat_background.dart';
 import '../../widgets/message_actions_sheet.dart';
 import '../../widgets/voice_record_button.dart';
 import '../../widgets/voice_message_bubble.dart';
+import '../call/group_call_screen.dart';
 
 // ── Dark theme constants ─────────────────────────────────────────────────────
 const Color _kChatScaffoldBg = Color(0xFF0A0A0A);
@@ -163,6 +164,16 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
   // Reply-to-message state
   CommunityMessage? _replyingTo;
   bool _hasText = false;
+  String _groupName = 'Group Chat';
+
+  // Group call state
+  bool _groupCallActive = false;
+  String? _groupCallAdminId;
+  String? _groupCallAdminName;
+  List<String> _groupCallParticipants = [];
+  Map<String, String> _groupCallParticipantNames = {};
+  Map<String, String> _groupCallParticipantImages = {};
+  bool _isVideoCall = false;
 
   String get _providerKey =>
       '${widget.communityId}:${widget.groupId}';
@@ -180,6 +191,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
           .fetchMembers();
       _checkAdminStatus();
       _fetchPinnedMessages();
+      _checkActiveGroupCall();
       _scrollToBottomInstant();
     });
 
@@ -206,6 +218,43 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
         if (!currentMessages.any((m) => m.id == msg.id)) {
           notifier.addMessageFromWebSocket(msg);
           _scrollToBottom();
+        }
+      }
+
+      // Group call events
+      if (data['sub_group_id'] == widget.groupId) {
+        switch (data['type']) {
+          case 'group_call_started':
+            setState(() {
+              _groupCallActive = true;
+              _groupCallAdminId = data['admin_id'];
+              _groupCallAdminName = data['admin_name'];
+              _groupCallParticipants = List<String>.from(data['participants'] ?? []);
+              _isVideoCall = data['is_video'] == true;
+            });
+            break;
+          case 'group_call_ended':
+            setState(() {
+              _groupCallActive = false;
+              _groupCallParticipants = [];
+              _groupCallParticipantNames = {};
+              _groupCallParticipantImages = {};
+            });
+            break;
+          case 'group_call_participant_joined':
+            setState(() {
+              _groupCallParticipants = List<String>.from(data['participants'] ?? []);
+              if (data['user_id'] != null && data['user_name'] != null) {
+                _groupCallParticipantNames[data['user_id']] = data['user_name'];
+                _groupCallParticipantImages[data['user_id']] = data['user_image'] ?? '';
+              }
+            });
+            break;
+          case 'group_call_participant_left':
+            setState(() {
+              _groupCallParticipants = List<String>.from(data['participants'] ?? []);
+            });
+            break;
         }
       }
     });
@@ -450,12 +499,69 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       for (final g in groups) {
         if (g['id']?.toString() == widget.groupId) {
           if (mounted) {
-            setState(() => _adminOnlyChat = g['admin_only_chat'] == true);
+            setState(() {
+              _adminOnlyChat = g['admin_only_chat'] == true;
+              _groupName = g['name']?.toString() ?? 'Group Chat';
+            });
           }
           break;
         }
       }
     } catch (_) {}
+  }
+
+  Future<void> _checkActiveGroupCall() async {
+    try {
+      final resp = await ApiService().get(
+        '/communities/${widget.communityId}/groups/${widget.groupId}/active-call',
+      );
+      final data = resp.data;
+      if (data['active'] == true && mounted) {
+        setState(() {
+          _groupCallActive = true;
+          _groupCallAdminId = data['admin_id'];
+          _groupCallAdminName = data['admin_name'];
+          _groupCallParticipants = List<String>.from(data['participants'] ?? []);
+          _isVideoCall = data['is_video'] == true;
+          final names = data['participant_names'];
+          final images = data['participant_images'];
+          if (names is Map) {
+            _groupCallParticipantNames = Map<String, String>.from(names);
+          }
+          if (images is Map) {
+            _groupCallParticipantImages = Map<String, String>.from(images);
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _startGroupCall() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => GroupCallScreen(
+        subGroupId: widget.groupId,
+        communityId: widget.communityId,
+        groupName: _groupName,
+        isVideo: false,
+        isAdmin: true,
+        existingParticipants: const [],
+      ),
+    ));
+  }
+
+  void _joinGroupCall() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => GroupCallScreen(
+        subGroupId: widget.groupId,
+        communityId: widget.communityId,
+        groupName: _groupName,
+        isVideo: _isVideoCall,
+        isAdmin: false,
+        existingParticipants: _groupCallParticipants,
+        participantNames: _groupCallParticipantNames,
+        participantImages: _groupCallParticipantImages,
+      ),
+    ));
   }
 
   Future<void> _toggleAdminOnlyChat() async {
@@ -1506,41 +1612,45 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       appBar: AppBar(
         backgroundColor: _kChatAppBarBg,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_adminOnlyChat)
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: Icon(Icons.lock, size: 16, color: Colors.amber[400]),
-              ),
-            const Text('Group Chat',
-                style: TextStyle(color: Colors.white)),
-          ],
-        ),
-        actions: [
-          InkWell(
-            onTap: _showMembersBottomSheet,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
+        title: GestureDetector(
+          onTap: _showMembersBottomSheet,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.group, size: 20, color: Colors.white),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${membersState.members.length}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: Colors.white,
+                  if (_adminOnlyChat)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Icon(Icons.lock, size: 14, color: Colors.amber[400]),
                     ),
+                  Flexible(
+                    child: Text(_groupName,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        overflow: TextOverflow.ellipsis),
                   ),
                 ],
               ),
-            ),
+              Text(
+                '${membersState.members.length} members',
+                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              ),
+            ],
           ),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _showMembersBottomSheet,
+            icon: const Icon(Icons.group, size: 22, color: Colors.white),
+            tooltip: 'Members',
+          ),
+          if (_isAdmin && !_groupCallActive)
+            IconButton(
+              onPressed: _startGroupCall,
+              icon: const Icon(Icons.call, size: 22, color: Colors.white),
+              tooltip: 'Start Group Call',
+            ),
           if (_isAdmin)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.white),
@@ -1548,9 +1658,22 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
               onSelected: (value) {
                 if (value == 'toggle_admin_chat') {
                   _toggleAdminOnlyChat();
+                } else if (value == 'start_group_call') {
+                  _startGroupCall();
                 }
               },
               itemBuilder: (ctx) => [
+                if (!_groupCallActive)
+                  const PopupMenuItem(
+                    value: 'start_group_call',
+                    child: Row(
+                      children: [
+                        Icon(Icons.call, color: Colors.white70, size: 20),
+                        SizedBox(width: 8),
+                        Text('Start Group Call', style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
                 PopupMenuItem(
                   value: 'toggle_admin_chat',
                   child: Row(
@@ -1577,11 +1700,12 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
       ),
       body: Column(
         children: [
-          // Members preview strip (dark)
-          if (!membersState.isLoading && membersState.members.isNotEmpty)
-            _MembersPreviewStrip(
-              members: membersState.members,
-              onViewAll: _showMembersBottomSheet,
+          // Active group call banner
+          if (_groupCallActive)
+            _GroupCallBanner(
+              participantCount: _groupCallParticipants.length,
+              adminName: _groupCallAdminName ?? 'Admin',
+              onTap: _joinGroupCall,
             ),
           // Pinned messages banner
           if (_pinnedMessages.isNotEmpty)
@@ -1632,7 +1756,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
                             )
                           : ListView.builder(
                               controller: _scrollController,
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               itemCount: state.messages.length,
                               itemBuilder: (context, index) {
                                 final message = state.messages[index];
@@ -1781,7 +1905,7 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
             )
           else
             Container(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
               decoration: const BoxDecoration(
                 color: _kInputBarBg,
                 border: Border(
@@ -1791,33 +1915,39 @@ class _SubGroupChatScreenState extends ConsumerState<SubGroupChatScreen> {
               child: SafeArea(
                 child: Row(
                   children: [
-                    IconButton(
-                      icon: Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
-                      onPressed: _isUploading ? null : _showAttachmentMenu,
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: Icon(Icons.add_circle_outline, color: AppTheme.primaryColor, size: 22),
+                        onPressed: _isUploading ? null : _showAttachmentMenu,
+                      ),
                     ),
                     Expanded(
                       child: TextField(
                         controller: _messageController,
                         focusNode: _messageFocusNode,
-                        style: const TextStyle(color: Colors.white),
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
                         decoration: InputDecoration(
                           hintText: 'Type a message...',
-                          hintStyle: TextStyle(color: Colors.grey[600]),
+                          hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
                           filled: true,
                           fillColor: _kInputFieldBg,
+                          isDense: true,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(24),
                             borderSide: BorderSide.none,
                           ),
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
+                            horizontal: 16,
+                            vertical: 8,
                           ),
                         ),
                         onSubmitted: (_) => _sendMessage(),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     _hasText
                         ? Container(
                             decoration: const BoxDecoration(
@@ -2488,13 +2618,13 @@ class _GroupMessageBubble extends StatelessWidget {
 
     // For other users: show avatar + bubble
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Avatar
           CircleAvatar(
-            radius: 16,
+            radius: 14,
             backgroundColor: const Color(0xFF333333),
             backgroundImage: senderImage != null && senderImage!.isNotEmpty
                 ? CachedNetworkImageProvider(senderImage!)
@@ -2503,14 +2633,14 @@ class _GroupMessageBubble extends StatelessWidget {
                 ? Text(
                     senderName.isNotEmpty ? senderName[0].toUpperCase() : '?',
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
                     ),
                   )
                 : null,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           // Bubble
           Flexible(child: _buildBubbleOnly(context, isImage, addMargin: false)),
         ],
@@ -2522,41 +2652,42 @@ class _GroupMessageBubble extends StatelessWidget {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: EdgeInsets.only(bottom: addMargin ? 8 : 0),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isImage ? 172 : MediaQuery.of(context).size.width * (isMe ? 0.75 : 0.65),
+        margin: EdgeInsets.only(bottom: addMargin ? 4 : 0),
+        padding: isImage
+            ? const EdgeInsets.all(4)
+            : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        constraints: BoxConstraints(
+          maxWidth: isImage ? 172 : MediaQuery.of(context).size.width * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color: isMe ? _kMyBubbleColor : _kOtherBubbleColor,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(isMe ? 16 : 4),
+            bottomRight: Radius.circular(isMe ? 4 : 16),
           ),
-          child: Container(
-            padding: isImage
-                ? const EdgeInsets.all(4)
-                : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: isMe ? _kMyBubbleColor : _kOtherBubbleColor,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isMe ? 16 : 4),
-                bottomRight: Radius.circular(isMe ? 4 : 16),
-              ),
-            ),
-            child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!isMe)
-              Padding(
-                padding: EdgeInsets.only(
-                    bottom: 4, left: isImage ? 8 : 0, top: isImage ? 4 : 0),
-                child: Text(
-                  senderName,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: _getSenderColor(senderName),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                      bottom: 2, left: isImage ? 6 : 0, top: isImage ? 2 : 0),
+                  child: Text(
+                    senderName,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: _getSenderColor(senderName),
+                    ),
                   ),
                 ),
               ),
-            // Reply quote (if this is a reply message)
+            // Reply quote
             if (replyWidget != null) replyWidget!,
             if (isImage)
               GestureDetector(
@@ -2599,8 +2730,6 @@ class _GroupMessageBubble extends StatelessWidget {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: Container(
-                            width: 160,
-                            height: 160,
                             color: Colors.black45,
                             child: const Center(
                               child: CircularProgressIndicator(
@@ -2623,7 +2752,7 @@ class _GroupMessageBubble extends StatelessWidget {
                     ),
             if (isImage && message.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
                 child: buildMessageText != null
                     ? buildMessageText!(message, isMe: isMe)
                     : Text(
@@ -2631,25 +2760,16 @@ class _GroupMessageBubble extends StatelessWidget {
                         style: const TextStyle(fontSize: 14, color: Colors.white),
                       ),
               ),
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Padding(
-                padding: isImage
-                    ? const EdgeInsets.only(right: 8, bottom: 4)
-                    : EdgeInsets.zero,
-                child: Text(
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
                   time,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[400],
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[400]),
                 ),
-              ),
-            ),
               ],
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -2721,6 +2841,110 @@ class _AttachmentOption extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Animated Group Call Banner ──────────────────────────────────────────────
+
+class _GroupCallBanner extends StatefulWidget {
+  final int participantCount;
+  final String adminName;
+  final VoidCallback onTap;
+
+  const _GroupCallBanner({
+    required this.participantCount,
+    required this.adminName,
+    required this.onTap,
+  });
+
+  @override
+  State<_GroupCallBanner> createState() => _GroupCallBannerState();
+}
+
+class _GroupCallBannerState extends State<_GroupCallBanner>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _blinkController;
+
+  @override
+  void initState() {
+    super.initState();
+    _blinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _blinkController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _blinkController,
+        builder: (context, child) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.green.shade800.withOpacity(0.8 + _blinkController.value * 0.2),
+                  Colors.green.shade600.withOpacity(0.8 + _blinkController.value * 0.2),
+                ],
+              ),
+            ),
+            child: Row(
+              children: [
+                // Blinking phone icon
+                Opacity(
+                  opacity: 0.5 + _blinkController.value * 0.5,
+                  child: const Icon(Icons.call, color: Colors.white, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Group call in progress',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${widget.participantCount} participant${widget.participantCount != 1 ? 's' : ''} - started by ${widget.adminName}',
+                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Text(
+                    'Join',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
