@@ -1228,26 +1228,6 @@ class _PostCardState extends ConsumerState<_PostCard>
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (post.communityId != null && post.communityName != null) ...[
-                            Text(
-                              '  \u00b7  in ',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => context.push('/community/${post.communityId}'),
-                              child: Text(
-                                post.communityName!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.primaryColor,
-                                ),
-                              ),
-                            ),
-                          ],
                           if (post.createdAt != null) ...[
                             Text(
                               '  \u00b7  ',
