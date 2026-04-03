@@ -1968,6 +1968,55 @@ async def explore_all_events(
     return results
 
 
+# ── Public Events (no auth — for website) ──────────────────────────────────
+
+@router.get("/explore/public-events", response_model=List[CommunityEventResponse])
+async def public_events(
+    request: Request,
+    event_type: str = Query("all"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+):
+    """Return upcoming events/trips without authentication — used by the public website."""
+    pool = request.app.state.pool
+
+    where_parts = ["(ce.date >= NOW() OR ce.end_date >= NOW())"]
+    params = []
+    idx = 1
+
+    if event_type and event_type != "all":
+        where_parts.append(f"ce.event_type = ${idx}")
+        params.append(event_type)
+        idx += 1
+
+    where_clause = "WHERE " + " AND ".join(where_parts)
+
+    params.append(skip)
+    skip_idx = idx
+    idx += 1
+    params.append(limit)
+    limit_idx = idx
+
+    rows = await pool.fetch(
+        f"""SELECT ce.*, u.name AS creator_name,
+                   c.name AS community_name, c.image_url AS community_image,
+                   (SELECT COUNT(*) FROM community_event_bookings WHERE event_id = ce.id) AS participants_count
+            FROM community_events ce
+            JOIN users u ON ce.created_by = u.id
+            JOIN communities c ON ce.community_id = c.id
+            {where_clause}
+            ORDER BY ce.date ASC
+            OFFSET ${skip_idx} LIMIT ${limit_idx}""",
+        *params
+    )
+
+    results = []
+    for row in rows:
+        resp = _event_row_to_response(row, creator_name=row["creator_name"], is_booked=False, participants_count=row["participants_count"])
+        results.append(resp)
+    return results
+
+
 # ── Community Events ─────────────────────────────────────────────────────────
 
 @router.post("/{community_id}/events", response_model=CommunityEventResponse, status_code=status.HTTP_201_CREATED)
