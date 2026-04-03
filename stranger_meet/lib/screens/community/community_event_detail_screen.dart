@@ -1430,12 +1430,15 @@ class _DetailGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkGrid = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: isDarkGrid ? const Color(0xFF1E1E1E) : Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Theme.of(context).dividerColor),
+        border: Border.all(
+          color: isDarkGrid ? Colors.white.withOpacity(0.1) : Theme.of(context).dividerColor,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2205,11 +2208,13 @@ class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkEnrolled = Theme.of(context).brightness == Brightness.dark;
     if (event.isJoined) {
       return Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          boxShadow: [
+          color: isDarkEnrolled ? const Color(0xFF1A1A1A) : Theme.of(context).scaffoldBackgroundColor,
+          border: isDarkEnrolled ? const Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 0.5)) : null,
+          boxShadow: isDarkEnrolled ? null : [
             BoxShadow(
               color: Colors.black.withOpacity(0.06),
               blurRadius: 10,
@@ -2259,14 +2264,20 @@ class _BottomBar extends StatelessWidget {
                         height: 46,
                         child: OutlinedButton.icon(
                           onPressed: () => _showMembersSheet(context),
-                          icon: const Icon(Icons.people_outline, size: 18),
+                          icon: Icon(Icons.people_outline, size: 18,
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white70 : Colors.black87),
                           label: Text(
                             'Members (${participants.length})',
                             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                           ),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black87,
-                            side: BorderSide(color: Colors.grey.shade300),
+                            foregroundColor: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white70 : Colors.black87,
+                            side: BorderSide(
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white24 : Colors.grey.shade300,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -2287,7 +2298,8 @@ class _BottomBar extends StatelessWidget {
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
+                            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                ? AppTheme.primaryColor : Colors.black,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -2306,10 +2318,12 @@ class _BottomBar extends StatelessWidget {
       );
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        boxShadow: [
+        color: isDark ? const Color(0xFF1A1A1A) : Theme.of(context).scaffoldBackgroundColor,
+        border: isDark ? const Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 0.5)) : null,
+        boxShadow: isDark ? null : [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
             blurRadius: 10,
@@ -2351,9 +2365,13 @@ class _BottomBar extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: (isFull || isPast || isJoining) ? null : onJoin,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
+                      backgroundColor: Theme.of(context).brightness == Brightness.dark
+                          ? AppTheme.primaryColor : Colors.black,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey[300],
+                      disabledBackgroundColor: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[800] : Colors.grey[300],
+                      disabledForegroundColor: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[500] : Colors.grey[600],
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),

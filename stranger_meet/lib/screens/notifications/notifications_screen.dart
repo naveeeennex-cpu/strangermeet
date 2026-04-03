@@ -294,13 +294,16 @@ class _FriendRequestCard extends StatelessWidget {
         ? DateTime.tryParse(req['created_at'])
         : null;
 
+    final isDarkReq = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: isDarkReq ? const Color(0xFF1E1E1E) : Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Theme.of(context).dividerColor),
+        border: Border.all(
+          color: isDarkReq ? Colors.white.withOpacity(0.1) : Theme.of(context).dividerColor,
+        ),
       ),
       child: Row(
         children: [
@@ -373,7 +376,7 @@ class _FriendRequestCard extends StatelessWidget {
                           onPressed: onAccept,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryColor,
-                            foregroundColor: Colors.black,
+                            foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -394,8 +397,14 @@ class _FriendRequestCard extends StatelessWidget {
                         child: OutlinedButton(
                           onPressed: onDecline,
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.grey[400],
-                            side: BorderSide(color: Colors.grey.shade700),
+                            foregroundColor: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.grey[300]
+                                : Colors.grey[600],
+                            side: BorderSide(
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.grey.shade500
+                                  : Colors.grey.shade400,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),

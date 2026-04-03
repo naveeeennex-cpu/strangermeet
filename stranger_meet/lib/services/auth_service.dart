@@ -1,7 +1,9 @@
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'api_service.dart';
+import 'notification_service.dart';
 import 'storage_service.dart';
+import 'websocket_service.dart';
 import '../models/user.dart';
 
 class AuthService {
@@ -100,6 +102,9 @@ class AuthService {
 
   Future<void> logout() async {
     try { await _googleSignIn.signOut(); } catch (_) {}
+    // Disconnect WebSocket so it reconnects with the new user's token on next login
+    WebSocketService().disconnect();
+    await NotificationService.instance.clearToken();
     await _storage.clearAll();
   }
 

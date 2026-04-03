@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/post.dart';
 import '../../providers/post_provider.dart';
 import '../../config/theme.dart';
+import '../../services/storage_service.dart';
 
 class VideoPostDetailScreen extends ConsumerStatefulWidget {
   final String postId;
@@ -24,11 +25,84 @@ class _VideoPostDetailScreenState extends ConsumerState<VideoPostDetailScreen> {
   bool _isMuted = false;
   bool _isPlaying = true;
   bool _showPlayPauseOverlay = false;
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
     _initVideo();
+    _loadCurrentUser();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    final userId = await StorageService().getUserId();
+    if (mounted) setState(() => _currentUserId = userId);
+  }
+
+  Future<void> _deletePost(Post post) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Post'),
+        content: const Text('Are you sure you want to delete this post? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(postsProvider.notifier).deletePost(post.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Post deleted')),
+        );
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e')),
+        );
+      }
+    }
+  }
+
+  void _showPostMenu(Post post) {
+    final isOwner = _currentUserId != null && _currentUserId == post.userId;
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isOwner || post.communityId != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _deletePost(post);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.cancel_outlined),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _initVideo() {
@@ -161,7 +235,7 @@ class _VideoPostDetailScreenState extends ConsumerState<VideoPostDetailScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.white),
-            onPressed: () {},
+            onPressed: () => _showPostMenu(post),
           ),
         ],
       ),
@@ -260,52 +334,58 @@ class _VideoPostDetailScreenState extends ConsumerState<VideoPostDetailScreen> {
                 // User row
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.grey[800],
-                      backgroundImage: post.userImage != null &&
-                              post.userImage!.isNotEmpty
-                          ? CachedNetworkImageProvider(post.userImage!)
-                          : null,
-                      child: post.userImage == null ||
-                              post.userImage!.isEmpty
-                          ? Text(
-                              post.userName.isNotEmpty
-                                  ? post.userName[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    GestureDetector(
+                      onTap: () => context.push('/user/${post.userId}'),
+                      child: Row(
                         children: [
-                          Text(
-                            post.userName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Colors.grey[800],
+                            backgroundImage: post.userImage != null &&
+                                    post.userImage!.isNotEmpty
+                                ? CachedNetworkImageProvider(post.userImage!)
+                                : null,
+                            child: post.userImage == null ||
+                                    post.userImage!.isEmpty
+                                ? Text(
+                                    post.userName.isNotEmpty
+                                        ? post.userName[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : null,
                           ),
-                          if (post.createdAt != null)
-                            Text(
-                              timeago.format(post.createdAt!),
-                              style: const TextStyle(
-                                  color: Colors.grey, fontSize: 13),
-                            ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                post.userName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              if (post.createdAt != null)
+                                Text(
+                                  timeago.format(post.createdAt!),
+                                  style: const TextStyle(
+                                      color: Colors.grey, fontSize: 13),
+                                ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
+                    const Spacer(),
                     IconButton(
                       icon:
                           const Icon(Icons.more_vert, color: Colors.white),
-                      onPressed: () {},
+                      onPressed: () => _showPostMenu(post),
                     ),
                   ],
                 ),

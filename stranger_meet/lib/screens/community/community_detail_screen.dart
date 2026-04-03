@@ -675,11 +675,13 @@ class _JoinBottomBar extends ConsumerWidget {
 
     if (community == null) return const SizedBox.shrink();
 
+    final isDarkJoin = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        boxShadow: [
+        color: isDarkJoin ? const Color(0xFF1A1A1A) : Theme.of(context).scaffoldBackgroundColor,
+        border: isDarkJoin ? const Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 0.5)) : null,
+        boxShadow: isDarkJoin ? null : [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
             blurRadius: 10,
@@ -696,17 +698,20 @@ class _JoinBottomBar extends ConsumerWidget {
                     .read(communityDetailProvider(communityId).notifier)
                     .leaveCommunity(),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.grey, width: 1.2),
+                  side: BorderSide(
+                    color: isDarkJoin ? Colors.grey.shade500 : Colors.grey,
+                    width: 1.2,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   'Leave Community',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: Colors.grey,
+                    color: isDarkJoin ? Colors.grey[400] : Colors.grey,
                   ),
                 ),
               )
@@ -715,7 +720,7 @@ class _JoinBottomBar extends ConsumerWidget {
                     .read(communityDetailProvider(communityId).notifier)
                     .joinCommunity(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
+                  backgroundColor: isDarkJoin ? AppTheme.primaryColor : Colors.black,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(

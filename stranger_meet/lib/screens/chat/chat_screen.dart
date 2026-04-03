@@ -16,6 +16,7 @@ import '../../config/theme.dart';
 import '../../models/message.dart';
 import '../../providers/chat_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/websocket_service.dart';
 import '../../widgets/chat_background.dart';
@@ -53,6 +54,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollController = ScrollController();
   final _messageFocusNode = FocusNode();
   String? _currentUserId;
+  String? _peerImage;
   bool _isOnline = false;
   bool _isTyping = false;
   bool _isUploading = false;
@@ -66,8 +68,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    // Suppress notifications from this sender while on this screen
+    NotificationService.instance.activeChatUserId = widget.userId;
     _loadCurrentUser();
     _fetchOnlineStatus();
+    _fetchPeerImage();
     Future.microtask(() async {
       await ref.read(messagesProvider(widget.userId).notifier).fetchMessages();
       _scrollToFirstUnreadOrBottom();
@@ -171,6 +176,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _fetchPeerImage() async {
+    try {
+      final api = ApiService();
+      final response = await api.get('/users/${widget.userId}');
+      final img = response.data['profile_image_url']?.toString() ?? '';
+      if (mounted && img.isNotEmpty) {
+        setState(() => _peerImage = img);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadCurrentUser() async {
     final userId = await StorageService().getUserId();
     if (mounted) {
@@ -180,6 +196,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    // Re-enable notifications from this sender
+    NotificationService.instance.activeChatUserId = null;
     _wsSubscription?.cancel();
     _reconnectSubscription?.cancel();
     // Refresh unread count when leaving chat (messages got marked as read)
@@ -613,7 +631,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   CircleAvatar(
                     radius: 18,
                     backgroundColor: const Color(0xFF333333),
-                    child: Text(
+                    backgroundImage: _peerImage != null && _peerImage!.isNotEmpty
+                        ? CachedNetworkImageProvider(_peerImage!)
+                        : null,
+                    child: _peerImage != null && _peerImage!.isNotEmpty
+                        ? null
+                        : Text(
                       widget.userName.isNotEmpty
                           ? widget.userName[0].toUpperCase()
                           : '?',
@@ -683,7 +706,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 builder: (_) => CallScreen(
                   peerId: widget.userId,
                   peerName: widget.userName,
-                  peerImage: '',
+                  peerImage: _peerImage ?? '',
                   isVideo: false,
                 ),
               ),
@@ -696,7 +719,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 builder: (_) => CallScreen(
                   peerId: widget.userId,
                   peerName: widget.userName,
-                  peerImage: '',
+                  peerImage: _peerImage ?? '',
                   isVideo: true,
                 ),
               ),

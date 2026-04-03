@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import '../../config/theme.dart';
 import '../../models/post.dart';
 import '../../providers/post_provider.dart';
+import '../../services/storage_service.dart';
 import '../../widgets/video_player_widget.dart';
 import '../../widgets/share_bottom_sheet.dart';
 
@@ -23,6 +25,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   final _commentFocusNode = FocusNode();
   List<Comment> _comments = [];
   bool _isLoadingComments = true;
+  String? _currentUserId;
 
   // Reply state
   String? _replyingToCommentId;
@@ -37,6 +40,12 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   void initState() {
     super.initState();
     _loadComments();
+    _loadCurrentUser();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    final userId = await StorageService().getUserId();
+    if (mounted) setState(() => _currentUserId = userId);
   }
 
   @override
@@ -186,8 +195,75 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     });
   }
 
-  Widget _buildAvatar(String? imageUrl, String name, {double radius = 16}) {
-    return CircleAvatar(
+  Future<void> _deletePost(String postId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Post'),
+        content: const Text('Are you sure you want to delete this post? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(postsProvider.notifier).deletePost(postId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Post deleted')),
+        );
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e')),
+        );
+      }
+    }
+  }
+
+  void _showPostMenu(Post post) {
+    final isOwner = _currentUserId != null && _currentUserId == post.userId;
+    // Community admins can also delete — backend handles the permission check
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isOwner || post.communityId != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _deletePost(post.id);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.cancel_outlined),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(String? imageUrl, String name, {double radius = 16, String? userId}) {
+    final avatar = CircleAvatar(
       radius: radius,
       backgroundColor: Theme.of(context).colorScheme.surface,
       backgroundImage:
@@ -204,6 +280,13 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             )
           : null,
     );
+    if (userId != null && userId.isNotEmpty) {
+      return GestureDetector(
+        onTap: () => context.push('/user/$userId'),
+        child: avatar,
+      );
+    }
+    return avatar;
   }
 
   Widget _buildCommentItem(Comment comment, int index) {
@@ -219,30 +302,35 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildAvatar(comment.userProfileImage, comment.userName),
+              _buildAvatar(comment.userProfileImage, comment.userName, userId: comment.userId),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Username + comment text inline
-                    RichText(
-                      text: TextSpan(
-                        style: const TextStyle(
-                          color: Colors.black87,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: comment.userName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
+                    GestureDetector(
+                      onTap: () => context.push('/user/${comment.userId}'),
+                      child: RichText(
+                        text: TextSpan(
+                          style: TextStyle(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.black87,
+                            fontSize: 14,
+                            height: 1.4,
                           ),
-                          const TextSpan(text: '  '),
-                          TextSpan(text: comment.text),
-                        ],
+                          children: [
+                            TextSpan(
+                              text: comment.userName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const TextSpan(text: '  '),
+                            TextSpan(text: comment.text),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -381,29 +469,34 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildAvatar(reply.userProfileImage, reply.userName, radius: 12),
+          _buildAvatar(reply.userProfileImage, reply.userName, radius: 12, userId: reply.userId),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                RichText(
-                  text: TextSpan(
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: reply.userName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
+                GestureDetector(
+                  onTap: () => context.push('/user/${reply.userId}'),
+                  child: RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.black87,
+                        fontSize: 13,
+                        height: 1.4,
                       ),
-                      const TextSpan(text: '  '),
-                      TextSpan(text: reply.text),
-                    ],
+                      children: [
+                        TextSpan(
+                          text: reply.userName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const TextSpan(text: '  '),
+                        TextSpan(text: reply.text),
+                      ],
+                    ),
                   ),
                 ),
                 if (reply.createdAt != null)
@@ -448,28 +541,40 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                           padding: const EdgeInsets.all(16),
                           child: Row(
                             children: [
-                              _buildAvatar(
-                                  post.userImage, post.userName,
-                                  radius: 20),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    post.userName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
+                              GestureDetector(
+                                onTap: () => context.push('/user/${post.userId}'),
+                                child: Row(
+                                  children: [
+                                    _buildAvatar(
+                                        post.userImage, post.userName,
+                                        radius: 20),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          post.userName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (post.createdAt != null)
+                                          Text(
+                                            timeago.format(post.createdAt!),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[500],
+                                            ),
+                                          ),
+                                      ],
                                     ),
-                                  ),
-                                  if (post.createdAt != null)
-                                    Text(
-                                      timeago.format(post.createdAt!),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[500],
-                                      ),
-                                    ),
-                                ],
+                                  ],
+                                ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.more_vert),
+                                onPressed: () => _showPostMenu(post),
                               ),
                             ],
                           ),
@@ -624,9 +729,13 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                     Container(
                       padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Theme.of(context).scaffoldBackgroundColor,
                         border: Border(
-                          top: BorderSide(color: Colors.grey[200]!),
+                          top: BorderSide(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? const Color(0xFF2A2A2A)
+                                : Colors.grey[200]!,
+                          ),
                         ),
                       ),
                       child: SafeArea(

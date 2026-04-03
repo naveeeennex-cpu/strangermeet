@@ -1617,6 +1617,18 @@ class _PostCardState extends ConsumerState<_PostCard>
                 },
               ),
             ] else ...[
+              // Community admins can also delete community posts
+              if (post.communityId != null)
+                ListTile(
+                  leading:
+                      const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('Delete Post',
+                      style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showDeleteConfirm(context, ref, post.id);
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.flag_outlined),
                 title: const Text('Report Post'),

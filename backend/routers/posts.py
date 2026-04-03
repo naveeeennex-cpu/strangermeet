@@ -555,7 +555,17 @@ async def delete_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    if str(post["user_id"]) != user_id:
+    # Allow post owner OR community admin to delete
+    is_owner = str(post["user_id"]) == user_id
+    is_community_admin = False
+    if post.get("community_id"):
+        community = await pool.fetchrow(
+            "SELECT created_by FROM communities WHERE id = $1", post["community_id"]
+        )
+        if community and str(community["created_by"]) == user_id:
+            is_community_admin = True
+
+    if not is_owner and not is_community_admin:
         raise HTTPException(status_code=403, detail="You can only delete your own posts")
 
     # Delete post (cascade deletes likes and comments)
