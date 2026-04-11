@@ -611,7 +611,14 @@ class _RideCardState extends State<_RideCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(children: [
-                            Text(r.driverName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                            Flexible(
+                              child: Text(
+                                r.driverName,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             if (r.isDriver) ...[
                               const SizedBox(width: 6),
                               _Badge(label: 'You', color: AppTheme.primaryColor),
@@ -621,13 +628,17 @@ class _RideCardState extends State<_RideCard> {
                             Icon(r.vehicleType == 'bike' ? Icons.two_wheeler : Icons.directions_car,
                                 size: 13, color: Colors.grey[500]),
                             const SizedBox(width: 4),
-                            Text(
-                              [
-                                r.vehicleType == 'bike' ? 'Bike' : 'Car',
-                                if (r.vehicleModel.isNotEmpty) r.vehicleModel,
-                                if (r.vehicleColor.isNotEmpty) r.vehicleColor,
-                              ].join(' • '),
-                              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                            Expanded(
+                              child: Text(
+                                [
+                                  r.vehicleType == 'bike' ? 'Bike' : 'Car',
+                                  if (r.vehicleModel.isNotEmpty) r.vehicleModel,
+                                  if (r.vehicleColor.isNotEmpty) r.vehicleColor,
+                                ].join(' • '),
+                                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ]),
                         ],
@@ -1580,11 +1591,17 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(children: [
-                                Text(r.driverName,
+                                Flexible(
+                                  child: Text(
+                                    r.driverName,
                                     style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 17)),
+                                        fontSize: 17),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                                 if (r.isDriver) ...[
                                   const SizedBox(width: 6),
                                   _Badge(label: 'You', color: Colors.green),
@@ -1599,16 +1616,20 @@ class _RideDetailScreenState extends State<_RideDetailScreen> {
                                   color: Colors.grey[500],
                                 ),
                                 const SizedBox(width: 4),
-                                Text(
-                                  [
-                                    r.vehicleType == 'bike' ? 'Bike' : 'Car',
-                                    if (r.vehicleModel.isNotEmpty)
-                                      r.vehicleModel,
-                                    if (r.vehicleColor.isNotEmpty)
-                                      r.vehicleColor,
-                                  ].join(' \u00b7 '),
-                                  style: TextStyle(
-                                      color: Colors.grey[500], fontSize: 12),
+                                Expanded(
+                                  child: Text(
+                                    [
+                                      r.vehicleType == 'bike' ? 'Bike' : 'Car',
+                                      if (r.vehicleModel.isNotEmpty)
+                                        r.vehicleModel,
+                                      if (r.vehicleColor.isNotEmpty)
+                                        r.vehicleColor,
+                                    ].join(' \u00b7 '),
+                                    style: TextStyle(
+                                        color: Colors.grey[500], fontSize: 12),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ]),
                             ],

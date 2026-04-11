@@ -8,7 +8,9 @@ import 'package:dio/dio.dart';
 
 import '../config/theme.dart';
 
-const _kMapsApiKey = 'AIzaSyCRoRzp4kOtaSxQGKOBP4Ke8L1oe8Xn5zA';
+// Unrestricted server key — used for Places Autocomplete, Geocoding, and Directions REST calls.
+// The Android-restricted key stays in AndroidManifest.xml for map tile rendering only.
+const _kMapsApiKey = 'AIzaSyAAIAqkhgbwe2BEECXNjMU9j039tRwKPXY';
 
 /// Result returned when user confirms a location.
 class PickedLocation {

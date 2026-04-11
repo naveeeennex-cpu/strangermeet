@@ -22,7 +22,7 @@ from schemas.community import (
 )
 
 
-GOOGLE_MAPS_API_KEY = "AIzaSyCRoRzp4kOtaSxQGKOBP4Ke8L1oe8Xn5zA"
+GOOGLE_MAPS_API_KEY = "AIzaSyAAIAqkhgbwe2BEECXNjMU9j039tRwKPXY"
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
